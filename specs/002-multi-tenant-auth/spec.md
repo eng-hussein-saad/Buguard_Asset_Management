@@ -8,6 +8,16 @@
 
 **Input**: User description: "Read PLAN.md and create a specification for phase 2 ONLY."
 
+## Clarifications
+
+### Session 2026-06-27
+
+- Q: Should refresh token rotation be mandatory in Phase 2? -> A: Refresh tokens are rotated on every successful refresh; the used token is revoked and replaced.
+- Q: What response should Phase 2 standardize for cross-organization asset access? -> A: Return 404 Not Found when a user references another organization's asset.
+- Q: What token lifetimes should Phase 2 require by default? -> A: Access tokens expire after 15 minutes; refresh tokens expire after 7 days.
+- Q: Should Phase 2 constrain asset type and status values in the data model? -> A: Constrain asset types to domain, subdomain, ip_address, service, certificate, and technology; constrain statuses to active, stale, and archived.
+- Q: Should Phase 2 constrain relationship types in the data model? -> A: Constrain relationship types to belongs_to, resolves_to, runs_on, covers, and detected_on.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Seed Evaluation Tenants and Users (Priority: P1)
@@ -38,7 +48,7 @@ As a seeded user, I need to log in, refresh my session, log out, and inspect my 
 
 1. **Given** a seeded active user and valid credentials, **When** the user logs in, **Then** the system returns an access token and a refresh token.
 2. **Given** a valid access token, **When** the user requests their current profile, **Then** the response identifies the user, organization, role, and active status.
-3. **Given** a valid unexpired refresh token, **When** the user requests a refresh, **Then** the system issues a new access token.
+3. **Given** a valid unexpired refresh token, **When** the user requests a refresh, **Then** the system issues a new access token and a replacement refresh token, and revokes the refresh token that was used.
 4. **Given** a refresh token has been logged out, expired, or revoked, **When** it is used to refresh a session, **Then** the request is rejected.
 
 ---
@@ -54,7 +64,7 @@ As an organization user, I need all tenant-owned data to be isolated to my organ
 **Acceptance Scenarios**:
 
 1. **Given** two organizations contain the same asset type and value, **When** users from each organization access their assets, **Then** each organization can store and retrieve its own copy independently.
-2. **Given** a user from one organization references an asset owned by another organization, **When** the user attempts to read or modify that asset through a protected operation, **Then** the system denies access or reports the asset as unavailable.
+2. **Given** a user from one organization references an asset owned by another organization, **When** the user attempts to read or modify that asset through a protected operation, **Then** the system reports the asset as unavailable with a not-found response.
 3. **Given** a relationship request references assets from different organizations, **When** the relationship is submitted, **Then** the system rejects the relationship.
 
 ---
@@ -114,7 +124,10 @@ As a backend developer preparing later phases, I need the core organization, use
 - **FR-003**: System MUST support exactly three organization-level roles for this phase: viewer, analyst, and admin.
 - **FR-004**: System MUST represent refresh tokens as user-owned records that store only a token hash, expiration timestamp, optional revocation timestamp, and creation timestamp.
 - **FR-005**: System MUST represent assets as organization-owned records with type, value, status, first-seen timestamp, last-seen timestamp, source, tags, metadata, creation timestamp, and update timestamp.
+- **FR-005a**: Asset type MUST be constrained to domain, subdomain, ip_address, service, certificate, or technology.
+- **FR-005b**: Asset status MUST be constrained to active, stale, or archived.
 - **FR-006**: System MUST represent asset relationships as organization-owned records connecting a source asset to a target asset with a relationship type, metadata, and creation timestamp.
+- **FR-006a**: Relationship type MUST be constrained to belongs_to, resolves_to, runs_on, covers, or detected_on.
 - **FR-007**: System MUST enforce unique organization slugs.
 - **FR-008**: System MUST enforce unique user emails.
 - **FR-009**: System MUST enforce asset uniqueness by organization, type, and value.
@@ -127,13 +140,14 @@ As a backend developer preparing later phases, I need the core organization, use
 - **FR-016**: System MUST NOT provide public registration, public organization creation, or organization switching endpoints.
 - **FR-017**: System MUST verify user passwords against stored password hashes during login.
 - **FR-018**: System MUST issue a short-lived access token and longer-lived refresh token after successful login.
+- **FR-018a**: Access tokens MUST expire after 15 minutes by default and refresh tokens MUST expire after 7 days by default.
 - **FR-019**: Access tokens MUST include user id, organization id, role, and expiry claims.
 - **FR-020**: Protected routes MUST reject missing, malformed, expired, or otherwise invalid access tokens.
 - **FR-021**: Current-user resolution MUST derive the authenticated user's organization and role from trusted authentication context.
 - **FR-022**: System MUST derive tenant ownership from authenticated organization context for tenant-owned resources.
 - **FR-023**: System MUST NOT accept or trust organization ownership supplied by clients for tenant-owned resources.
 - **FR-024**: Every tenant-owned asset and relationship query MUST be scoped to the authenticated user's organization.
-- **FR-025**: System MUST reject or hide cross-organization asset access according to the project's structured error strategy.
+- **FR-025**: System MUST respond with not found when authenticated users reference assets owned by another organization, so the API does not reveal whether another tenant's asset exists.
 - **FR-026**: System MUST reject relationships where the source and target assets do not both belong to the authenticated user's organization.
 - **FR-027**: System MUST enforce viewer permissions for reading assets, relationships, and graph data.
 - **FR-028**: System MUST enforce analyst permissions for all viewer actions plus asset creation, asset updates, bulk import, stale marking, and relationship creation.
@@ -142,12 +156,12 @@ As a backend developer preparing later phases, I need the core organization, use
 - **FR-031**: Refresh tokens MUST expire and expired refresh tokens MUST be rejected.
 - **FR-032**: Logout MUST revoke the submitted refresh token.
 - **FR-033**: Refresh token validation MUST reject revoked refresh tokens.
-- **FR-034**: System SHOULD rotate refresh tokens during refresh when feasible within the phase scope.
+- **FR-034**: System MUST rotate refresh tokens on every successful refresh by revoking the submitted refresh token and issuing a replacement refresh token.
 - **FR-035**: System MUST never log raw refresh tokens.
 - **FR-036**: System MUST never store raw refresh tokens or raw passwords.
 - **FR-037**: System MUST include tests for seeded login, refresh token behavior, logout revocation, RBAC decisions, and tenant isolation.
 - **FR-038**: System MUST document seed instructions, seeded credentials, authentication flow, role permissions, and the absence of public onboarding endpoints in the README.
-- **FR-039**: System MUST document any new required environment variables in `.env.example`.
+- **FR-039**: System MUST document any new required environment variables in `.env.example`, including default access-token and refresh-token lifetime settings.
 
 ### Key Entities
 
@@ -155,7 +169,7 @@ As a backend developer preparing later phases, I need the core organization, use
 - **User**: A seeded account that belongs to exactly one organization and has one role controlling its allowed actions.
 - **Refresh Token**: A revocable, expiring session credential owned by one user and stored only as a hash.
 - **Asset**: An organization-owned attack-surface item, such as a domain, subdomain, IP address, service, certificate, or technology.
-- **Asset Relationship**: An organization-owned link between two assets in the same organization.
+- **Asset Relationship**: An organization-owned link between two assets in the same organization, using one of the supported relationship types: belongs_to, resolves_to, runs_on, covers, or detected_on.
 - **Role Permission**: The allowed action set for viewer, analyst, and admin users.
 
 ## Success Criteria *(mandatory)*
@@ -168,13 +182,15 @@ As a backend developer preparing later phases, I need the core organization, use
 - **SC-004**: 100% of seeded active users can log in with documented credentials and receive both an access token and a refresh token.
 - **SC-005**: 100% of protected endpoint checks reject unauthenticated requests.
 - **SC-006**: Access tokens issued by the system contain user id, organization id, role, and expiry claims in every successful login.
-- **SC-007**: 100% of expired, revoked, malformed, or unknown refresh token test cases are rejected.
+- **SC-006a**: Default token configuration expires access tokens after 15 minutes and refresh tokens after 7 days.
+- **SC-007**: 100% of expired, revoked, malformed, unknown, or reused refresh token test cases are rejected.
 - **SC-008**: Logout revokes the submitted refresh token, and the same token cannot be used afterward.
-- **SC-009**: Viewer, analyst, and admin authorization tests match the documented role matrix in every covered operation category.
-- **SC-010**: Two organizations can store identical asset type and value pairs independently, while duplicates within one organization are rejected.
-- **SC-011**: Cross-organization asset access and cross-organization relationship creation are blocked in 100% of tenant isolation tests.
-- **SC-012**: The API surface exposes login, refresh, logout, and current-user auth endpoints, and exposes no public registration, organization creation, or organization switching endpoints.
-- **SC-013**: README and `.env.example` include all required Phase 2 setup, seed, credential, authentication, and configuration notes without committing secrets.
+- **SC-009**: Every successful refresh returns a replacement refresh token and makes the submitted refresh token unusable afterward.
+- **SC-010**: Viewer, analyst, and admin authorization tests match the documented role matrix in every covered operation category.
+- **SC-011**: Two organizations can store identical asset type and value pairs independently, while duplicates within one organization are rejected.
+- **SC-012**: Cross-organization asset access and cross-organization relationship creation are blocked in 100% of tenant isolation tests.
+- **SC-013**: The API surface exposes login, refresh, logout, and current-user auth endpoints, and exposes no public registration, organization creation, or organization switching endpoints.
+- **SC-014**: README and `.env.example` include all required Phase 2 setup, seed, credential, authentication, and configuration notes without committing secrets.
 
 ## Assumptions
 
@@ -183,5 +199,6 @@ As a backend developer preparing later phases, I need the core organization, use
 - Each user belongs to exactly one organization and has exactly one organization-level role.
 - Public user registration, public organization creation, team management, invitations, email verification, password reset, billing, and organization switching are out of scope.
 - Asset CRUD, bulk import behavior, lifecycle transitions, full relationship APIs, graph retrieval, rate limiting, caching, CI expansion, and LangChain analysis are later phases unless needed only to prove Phase 2 isolation and permission foundations.
-- Cross-organization access may be reported as forbidden or unavailable, as long as the behavior is consistent with the project's structured error strategy and does not leak tenant data.
-- Refresh token rotation is preferred but may be treated as a best-effort enhancement if the rest of the Phase 2 security foundation is complete.
+- Cross-organization asset access is reported as not found to avoid leaking whether another tenant's asset exists.
+- Refresh token rotation is required for Phase 2.
+- Default access-token lifetime is 15 minutes and default refresh-token lifetime is 7 days.
