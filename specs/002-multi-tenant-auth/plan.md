@@ -110,6 +110,7 @@ app/
 |   |-- assets.py
 |   |-- auth.py
 |   |-- organizations.py
+|   |-- relationships.py
 |   `-- users.py
 |-- schemas/
 |   `-- auth.py

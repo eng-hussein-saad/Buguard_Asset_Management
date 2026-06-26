@@ -75,7 +75,7 @@ As a system maintainer, I need viewer, analyst, and admin permissions enforced c
 
 **Why this priority**: Later asset-management features rely on these permission boundaries. Implementing them in Phase 2 prevents later routes from inventing inconsistent authorization behavior.
 
-**Independent Test**: Authenticate as each seeded role and verify read, write, relationship, import, stale-marking, and delete/archive permissions are allowed or denied according to the role matrix.
+**Independent Test**: Authenticate as each seeded role and verify reusable RBAC decisions for read, write, relationship, import, stale-marking, and delete/archive operation categories are allowed or denied according to the role matrix. Phase 2 proves these decisions through shared helpers and protected ownership checks; full asset CRUD, import, graph, and lifecycle endpoints remain later phases.
 
 **Acceptance Scenarios**:
 
@@ -149,9 +149,9 @@ As a backend developer preparing later phases, I need the core organization, use
 - **FR-024**: Every tenant-owned asset and relationship query MUST be scoped to the authenticated user's organization.
 - **FR-025**: System MUST respond with not found when authenticated users reference assets owned by another organization, so the API does not reveal whether another tenant's asset exists.
 - **FR-026**: System MUST reject relationships where the source and target assets do not both belong to the authenticated user's organization.
-- **FR-027**: System MUST enforce viewer permissions for reading assets, relationships, and graph data.
-- **FR-028**: System MUST enforce analyst permissions for all viewer actions plus asset creation, asset updates, bulk import, stale marking, and relationship creation.
-- **FR-029**: System MUST enforce admin permissions for all analyst actions plus asset delete/archive operations.
+- **FR-027**: System MUST define and enforce reusable viewer permission decisions for reading assets, relationships, and graph data when protected Phase 2 checks or later endpoints request those actions.
+- **FR-028**: System MUST define and enforce reusable analyst permission decisions for all viewer actions plus asset creation, asset updates, bulk import, stale marking, and relationship creation when protected Phase 2 checks or later endpoints request those actions.
+- **FR-029**: System MUST define and enforce reusable admin permission decisions for all analyst actions plus asset delete/archive operations when protected Phase 2 checks or later endpoints request those actions.
 - **FR-030**: System MUST reject forbidden actions with a clear authorization failure.
 - **FR-031**: Refresh tokens MUST expire and expired refresh tokens MUST be rejected.
 - **FR-032**: Logout MUST revoke the submitted refresh token.
