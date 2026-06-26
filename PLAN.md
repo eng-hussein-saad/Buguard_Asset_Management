@@ -46,13 +46,15 @@ The project will include:
 scripts/seed.py
 ```
 
-The seed script should create at least:
+The seed script should create:
 
 ```txt
 Demo organization
 Admin user
 Analyst user
 Viewer user
+Second organization for tenant isolation tests
+Second organization admin user
 ```
 
 Example seeded users:
@@ -61,11 +63,6 @@ Example seeded users:
 admin@example.com   / password123
 analyst@example.com / password123
 viewer@example.com  / password123
-```
-
-Optionally, the seed script may create a second organization and second admin user to support tenant isolation tests:
-
-```txt
 other-admin@example.com / password123
 ```
 
@@ -627,8 +624,8 @@ Demo organization
 Admin user
 Analyst user
 Viewer user
-Optional second organization for tenant isolation tests
-Optional second organization admin user
+Second organization for tenant isolation tests
+Second organization admin user
 ```
 
 Example seeded users:
@@ -637,11 +634,6 @@ Example seeded users:
 admin@example.com / password123
 analyst@example.com / password123
 viewer@example.com / password123
-```
-
-If a second tenant is seeded:
-
-```txt
 other-admin@example.com / password123
 ```
 
