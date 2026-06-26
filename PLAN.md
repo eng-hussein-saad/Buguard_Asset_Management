@@ -6,11 +6,230 @@ This project implements the Backend Engineering track for the Buguard DarkAtlas 
 
 The implementation will use Spec Kit as the main development workflow. Each phase will be implemented using a spec-driven process: define the feature specification, clarify requirements, create a technical plan, generate implementation tasks, analyze consistency, implement, test, and commit.
 
-The repository has already been initialized with Git, GitHub, uv, and Spec Kit. Therefore, Phase 1 starts from the existing repository and focuses on establishing the backend foundation: FastAPI dependencies, project structure, Docker Compose, PostgreSQL, SQLAlchemy, Alembic, configuration, health checks, linting, and test infrastructure.
+The repository has already been initialized with Git, GitHub, uv, and Spec Kit. Phase 1 has already been implemented and must remain unchanged in this plan.
 
-The goal is not only to satisfy the mandatory backend requirements, but to demonstrate production-level backend thinking through multi-tenant organization isolation, JWT authentication, refresh tokens, role-based access control, relationship graph visualization, CI, rate limiting, optional caching, and one LangChain-powered backend analysis feature.
+The goal is to satisfy the mandatory backend requirements while still demonstrating production-level backend thinking through organization-level tenant isolation, JWT authentication, refresh tokens, role-based access control, relationship graph modeling, CI, rate limiting, optional caching, optional graph visualization, and one optional LangChain-powered backend analysis feature.
 
-Assumption: In this implementation, each user belongs to exactly one organization. Multi-tenancy is implemented at the organization data level: assets and relationships are scoped by organization_id, and all queries derive organization_id from the authenticated user context. Supporting users with roles across multiple organizations would be a future extension using a memberships table and organization switching.
+This plan deliberately keeps authentication and organization onboarding simple so implementation effort stays focused on the core Asset Management backend. Organizations and users are seeded for development and evaluation. Each user belongs to exactly one organization and has one role in that organization. The system is still multi-tenant because all tenant-owned data is scoped by `organization_id`, and every tenant-owned query derives `organization_id` from the authenticated user context.
+
+---
+
+## Key Assumptions
+
+The following assumptions are part of the project scope and should also be documented in the final README.
+
+### 1. Public user registration is out of scope
+
+The API will not implement:
+
+```txt
+POST /auth/register
+```
+
+Users are created through a seed script for local development and evaluator testing.
+
+### 2. Public organization creation is out of scope
+
+The API will not implement:
+
+```txt
+POST /organizations
+```
+
+Organizations are created through a seed script.
+
+### 3. Users and organizations are seeded
+
+The project will include:
+
+```txt
+scripts/seed.py
+```
+
+The seed script should create at least:
+
+```txt
+Demo organization
+Admin user
+Analyst user
+Viewer user
+```
+
+Example seeded users:
+
+```txt
+admin@example.com   / password123
+analyst@example.com / password123
+viewer@example.com  / password123
+```
+
+Optionally, the seed script may create a second organization and second admin user to support tenant isolation tests:
+
+```txt
+other-admin@example.com / password123
+```
+
+### 4. Each user belongs to exactly one organization
+
+Each user has one `organization_id` stored directly on the `users` table.
+
+There is no `memberships` table in this implementation.
+
+### 5. Each user has one role within their organization
+
+Each user has one role stored directly on the `users` table.
+
+Supported roles:
+
+```txt
+viewer
+analyst
+admin
+```
+
+Permissions:
+
+```txt
+viewer:
+- read assets
+- read relationships
+- read graph
+
+analyst:
+- viewer permissions
+- create assets
+- update assets
+- bulk import assets
+- mark assets stale
+- create relationships
+
+admin:
+- analyst permissions
+- delete/archive assets
+```
+
+### 6. Multi-tenancy is enforced at the organization data level
+
+The system supports multiple organizations. Tenant-owned resources include:
+
+```txt
+assets
+asset_relationships
+```
+
+Each tenant-owned record stores:
+
+```txt
+organization_id
+```
+
+### 7. `organization_id` always comes from authentication context
+
+Clients must never provide `organization_id` when creating or modifying tenant-owned resources.
+
+The backend always derives `organization_id` from the authenticated user’s JWT/current-user context.
+
+### 8. JWT access tokens include organization and role context
+
+Access tokens include:
+
+```json
+{
+  "sub": "user_id",
+  "organization_id": "user_organization_id",
+  "role": "user_role",
+  "exp": 1234567890
+}
+```
+
+Because each user belongs to exactly one organization, there is no active organization switching in this version.
+
+### 9. All tenant-owned queries are organization-scoped
+
+Every query for assets or relationships must filter by the authenticated user’s organization.
+
+Example:
+
+```sql
+WHERE organization_id = current_user.organization_id
+```
+
+This prevents users from one organization from seeing or modifying another organization’s data.
+
+### 10. Asset deduplication is scoped per organization
+
+Two different organizations may have the same asset value.
+
+Therefore, asset uniqueness is enforced using:
+
+```sql
+UNIQUE (organization_id, type, value)
+```
+
+This means Organization A and Organization B can both have `api.example.com`, but the same organization cannot create duplicate copies of the same asset.
+
+### 11. Relationships cannot cross organizations
+
+Asset relationships may only connect assets that belong to the same organization.
+
+The backend must reject any attempt to create a relationship where the source and target assets belong to different organizations.
+
+### 12. SaaS user management is out of scope
+
+The project does not implement:
+
+```txt
+user invitations
+email verification
+password reset
+organization admin panels
+team management
+billing
+```
+
+These are valid SaaS features, but they are outside the scope of this Asset Management backend assessment.
+
+### 13. Organization switching is a future enhancement
+
+Supporting users with different roles across multiple organizations is intentionally out of scope.
+
+A future version could introduce:
+
+```txt
+memberships table
+organization switching endpoint
+one access token per active organization context
+```
+
+### 14. The sample dataset is imported through the bulk import endpoint
+
+No live scanning or external asset discovery is implemented.
+
+The system assumes assets are provided through the sample JSON dataset and imported using:
+
+```txt
+POST /assets/import
+```
+
+### 15. Core backend features take priority over bonuses
+
+If time becomes limited, the priority is:
+
+```txt
+asset CRUD
+filtering
+sorting
+pagination
+bulk import
+deduplication
+lifecycle handling
+relationships
+tests
+Docker Compose
+README
+```
+
+Bonus features such as graph visualization, caching, rate limiting, CI, and LangChain should not compromise the correctness of the mandatory backend requirements.
 
 ---
 
@@ -228,13 +447,15 @@ Expected:
 
 ---
 
-# Phase 2 — Multi-Tenant Data Model, JWT Auth, Refresh Tokens, and RBAC
+# Phase 2 — Multi-Tenant Data Model, Seeded Users, JWT Auth, Refresh Tokens, and RBAC
 
 ## Goal
 
-Build the production-grade security and data ownership foundation.
+Build the security and data ownership foundation without adding unnecessary SaaS onboarding complexity.
 
-This phase combines multi-tenancy and authentication because they are tightly connected. Each user belongs to exactly one organization, and all tenant-owned data must be scoped to that user's organization.
+This phase implements organization-scoped multi-tenancy, seeded users, JWT access tokens, refresh tokens, and role-based access control.
+
+There is no public registration endpoint and no public organization creation endpoint in this project.
 
 ## Scope
 
@@ -246,6 +467,20 @@ users
 refresh_tokens
 assets
 asset_relationships
+```
+
+Do not create:
+
+```txt
+memberships
+```
+
+Do not implement:
+
+```txt
+POST /auth/register
+POST /auth/switch-organization
+POST /organizations
 ```
 
 ## ERD
@@ -334,19 +569,80 @@ UNIQUE (
 )
 ```
 
+Users:
+
+```sql
+UNIQUE (email)
+```
+
+Organizations:
+
+```sql
+UNIQUE (slug)
+```
+
 Users belong to exactly one organization through `users.organization_id`.
+
 Each user has one organization-level role stored on the user record.
+
+## Recommended Indexes
+
+```sql
+assets (organization_id, type)
+assets (organization_id, status)
+assets (organization_id, last_seen)
+assets (organization_id, value)
+asset_relationships (organization_id, source_asset_id)
+asset_relationships (organization_id, target_asset_id)
+users (email)
+users (organization_id)
+refresh_tokens (user_id)
+```
 
 ## Auth Endpoints
 
-Implement:
+Implement only:
 
 ```txt
-POST /auth/register
 POST /auth/login
 POST /auth/refresh
 POST /auth/logout
 GET  /auth/me
+```
+
+Do not implement registration.
+
+## Seed Script
+
+Add:
+
+```txt
+scripts/seed.py
+```
+
+The seed script should create:
+
+```txt
+Demo organization
+Admin user
+Analyst user
+Viewer user
+Optional second organization for tenant isolation tests
+Optional second organization admin user
+```
+
+Example seeded users:
+
+```txt
+admin@example.com / password123
+analyst@example.com / password123
+viewer@example.com / password123
+```
+
+If a second tenant is seeded:
+
+```txt
+other-admin@example.com / password123
 ```
 
 ## Roles
@@ -420,12 +716,13 @@ Cross-organization asset access should return `404 Not Found` or `403 Forbidden`
 * Logout revokes the refresh token.
 * Refresh endpoint rejects expired or revoked tokens.
 * Prefer refresh token rotation if time allows.
+* Never log raw refresh tokens.
 
 ## Suggested Spec Kit Prompt
 
 ```txt
 /speckit.specify
-Phase 2: Implement the multi-tenant database model, JWT authentication, refresh tokens, and role-based access control. Each user belongs to exactly one organization and has one organization-level role stored on the user record. Assets and relationships must be scoped by organization_id. Login returns a short-lived JWT access token and a longer-lived refresh token. Access tokens include user id, user organization id, and user role. Write operations require analyst or admin. Delete operations require admin. Refresh tokens must be stored hashed, support logout revocation, and never be logged.
+Phase 2: Implement the multi-tenant database model, seeded users, JWT authentication, refresh tokens, and role-based access control. Do not implement public registration or organization onboarding. Organizations and users are seeded for development and evaluation. Each user belongs to exactly one organization and has one role. Assets and relationships must be scoped by organization_id. Login returns a short-lived JWT access token and a longer-lived refresh token. Access tokens include user id, organization id, and role. Write operations require analyst or admin. Delete operations require admin. Refresh tokens must be stored hashed, support logout revocation, and never be logged.
 ```
 
 ## Deliverables
@@ -439,13 +736,21 @@ Phase 2: Implement the multi-tenant database model, JWT authentication, refresh 
 * Refresh token hashing and storage
 * RBAC dependencies
 * Tenant-aware current user dependency
-* Tests for auth, RBAC, and tenant isolation
+* Seed script
+* README seed instructions
+* Tests for auth, refresh tokens, RBAC, and tenant isolation
 
 ## Acceptance Criteria
 
 * Migrations apply successfully.
+* Organizations can be seeded.
+* Users can be seeded.
 * Each user belongs to exactly one organization.
-* A user has one role within their organization.
+* A user has exactly one role.
+* There is no `/auth/register` endpoint.
+* There is no `/organizations` endpoint.
+* A seeded user can log in.
+* Login returns access and refresh tokens.
 * JWT access tokens include user id, organization id, and role.
 * Protected routes reject unauthenticated users.
 * Viewer cannot perform write operations.
@@ -454,7 +759,7 @@ Phase 2: Implement the multi-tenant database model, JWT authentication, refresh 
 * Refresh token can issue a new access token.
 * Logout revokes refresh token.
 * Two organizations can store identical asset values independently.
-* One organization cannot access another organization’s data.
+* One organization cannot access another organization’s assets.
 
 ---
 
@@ -545,6 +850,8 @@ Every asset query must include:
 organization_id = current_user.organization_id
 ```
 
+The API must never accept `organization_id` in asset create/update request bodies.
+
 ## Suggested Spec Kit Prompt
 
 ```txt
@@ -566,6 +873,7 @@ Phase 3: Implement tenant-scoped asset CRUD with filtering, sorting, pagination,
 ## Acceptance Criteria
 
 * Assets can be created, listed, read, updated, and deleted/archived.
+* Asset create/update payloads do not accept `organization_id`.
 * List endpoint does not return assets from other organizations.
 * Filtering works.
 * Sorting works.
@@ -696,6 +1004,7 @@ Phase 4: Implement tenant-scoped bulk import, deduplication, lifecycle handling,
 ## Acceptance Criteria
 
 * Importing the same dataset twice does not increase asset count.
+* Import payloads do not accept or trust `organization_id`.
 * Tags are merged without duplicates.
 * Metadata is merged predictably.
 * Malformed records are reported without crashing the batch.
@@ -710,7 +1019,7 @@ Phase 4: Implement tenant-scoped bulk import, deduplication, lifecycle handling,
 
 ## Goal
 
-Implement the asset relationship graph and add a simple visualization powered by the graph API.
+Implement the asset relationship graph and optionally add a simple visualization powered by the graph API.
 
 This phase combines relationship modeling and visualization because the visualization should consume the same graph endpoint used by the API.
 
@@ -752,6 +1061,7 @@ When creating a relationship:
 * Both assets must belong to the current organization.
 * Relationship must be scoped to the current organization.
 * Duplicate relationships should not be created.
+* Relationship creation payloads must not accept or trust `organization_id`.
 
 ## Graph Response Shape
 
@@ -794,7 +1104,7 @@ The visualization should:
 
 ```txt
 /speckit.specify
-Phase 5: Implement tenant-scoped asset relationships, graph retrieval, and a simple graph visualization. Relationships connect two assets using source_asset_id, target_asset_id, and relationship_type. The API must prevent cross-organization relationships. The graph endpoint should return nodes and edges around a selected asset in a visualization-friendly structure. The visualization should consume the graph endpoint and render the relationship graph without duplicating backend graph logic.
+Phase 5: Implement tenant-scoped asset relationships, graph retrieval, and an optional simple graph visualization. Relationships connect two assets using source_asset_id, target_asset_id, and relationship_type. The API must prevent cross-organization relationships. The graph endpoint should return nodes and edges around a selected asset in a visualization-friendly structure. The visualization should consume the graph endpoint and render the relationship graph without duplicating backend graph logic.
 ```
 
 ## Deliverables
@@ -804,7 +1114,7 @@ Phase 5: Implement tenant-scoped asset relationships, graph retrieval, and a sim
 * Relationship service
 * Relationship repository
 * Graph response schema
-* Simple graph visualization
+* Optional simple graph visualization
 * Tests for relationship creation, duplicate prevention, graph retrieval, cross-tenant blocking, and visualization route if applicable
 
 ## Acceptance Criteria
@@ -812,10 +1122,11 @@ Phase 5: Implement tenant-scoped asset relationships, graph retrieval, and a sim
 * Relationships can be created between assets in the same organization.
 * Duplicate relationships are prevented.
 * Cross-tenant relationships are blocked.
+* Relationship create payloads do not accept `organization_id`.
 * Graph endpoint returns nodes and edges.
 * Viewer can read graph.
 * Analyst/admin can create relationships.
-* Visualization renders a real graph from the API.
+* Visualization renders a real graph from the API if implemented.
 
 ---
 
@@ -835,7 +1146,8 @@ Add tests for:
 
 ```txt
 health check
-auth
+seed script
+seeded login
 refresh tokens
 RBAC
 tenant isolation
@@ -927,7 +1239,7 @@ mark stale
 
 ```txt
 /speckit.specify
-Phase 6: Add comprehensive automated tests, GitHub Actions CI, rate limiting, and optional organization-scoped caching. Tests must cover the core assessment logic: deduplication, filtering, relationships, tenant isolation, RBAC, lifecycle handling, and malformed imports. CI should install uv, sync dependencies from uv.lock, and run linting and tests. Rate limit login, refresh, import, and later AI endpoints. If caching is added, cache keys must include organization_id and must never leak data across organizations.
+Phase 6: Add comprehensive automated tests, GitHub Actions CI, rate limiting, and optional organization-scoped caching. Tests must cover the core assessment logic: deduplication, filtering, relationships, tenant isolation, RBAC, lifecycle handling, malformed imports, and seeded-user authentication. CI should install uv, sync dependencies from uv.lock, and run linting and tests. Rate limit login, refresh, import, and later AI endpoints. If caching is added, cache keys must include organization_id and must never leak data across organizations.
 ```
 
 ## Deliverables
@@ -946,6 +1258,7 @@ Phase 6: Add comprehensive automated tests, GitHub Actions CI, rate limiting, an
 * CI fails if tests fail.
 * Login endpoint is rate-limited.
 * Import endpoint is rate-limited.
+* Seeded users can be used in auth tests.
 * Core assessment logic is covered by tests.
 * Optional cache never leaks data across organizations.
 
@@ -955,7 +1268,7 @@ Phase 6: Add comprehensive automated tests, GitHub Actions CI, rate limiting, an
 
 ## Goal
 
-Add one safe, grounded LangChain-powered backend bonus feature and prepare the repository for final submission.
+Add one safe, grounded LangChain-powered backend bonus feature if time allows and prepare the repository for final submission.
 
 This phase combines the AI bonus with final documentation because the LangChain feature must be clearly explained, including its safety and grounding strategy.
 
@@ -1027,17 +1340,36 @@ setup instructions
 environment variables
 docker compose instructions
 migration instructions
+seed script instructions
+seeded user credentials
 test instructions
 API documentation link
 auth flow examples
 sample import example
 multi-tenancy explanation
+RBAC explanation
 deduplication strategy
 relationship model explanation
-graph visualization usage
-LangChain feature explanation
+graph visualization usage if implemented
+LangChain feature explanation if implemented
 known tradeoffs
 future improvements
+```
+
+## Required README Assumptions
+
+The README must clearly state:
+
+```txt
+1. Public user registration is out of scope.
+2. Public organization creation is out of scope.
+3. Organizations and users are seeded for local development and evaluation.
+4. Each user belongs to exactly one organization.
+5. Each user has one role within that organization.
+6. Multi-tenancy is still enforced because all assets and relationships are scoped by organization_id.
+7. organization_id is always derived from the authenticated user context, never from client input.
+8. Supporting users across multiple organizations is a future enhancement.
+9. No live scanning or asset discovery is implemented; assets are imported from the provided dataset.
 ```
 
 ## Final Verification
@@ -1060,17 +1392,17 @@ uv run ruff check .
 
 ```txt
 /speckit.specify
-Phase 7: Implement one LangChain-powered backend bonus feature and finalize the project for submission. The analysis endpoint must authenticate the user, scope data by organization_id, query real assets from PostgreSQL first, and pass only those assets to the model. The model must be instructed not to invent assets. The response should include a summary, risks, and asset_ids_used as evidence. Finalize README, .env.example, Docker instructions, API examples, architecture notes, test instructions, known tradeoffs, and submission polish.
+Phase 7: Implement one optional LangChain-powered backend bonus feature if time allows and finalize the project for submission. The analysis endpoint must authenticate the user, scope data by organization_id, query real assets from PostgreSQL first, and pass only those assets to the model. The model must be instructed not to invent assets. The response should include a summary, risks, and asset_ids_used as evidence. Finalize README, .env.example, Docker instructions, seed instructions, seeded credentials, API examples, architecture notes, test instructions, known tradeoffs, and submission polish.
 ```
 
 ## Deliverables
 
-* Analysis route
-* LangChain service
-* Prompt template
-* Environment variable support for model provider key
-* Graceful model error handling
-* Tests using mocked LLM output
+* Optional analysis route
+* Optional LangChain service
+* Optional prompt template
+* Environment variable support for model provider key if LangChain is implemented
+* Graceful model error handling if LangChain is implemented
+* Tests using mocked LLM output if LangChain is implemented
 * Complete README
 * `.env.example`
 * Clean Docker Compose run
@@ -1078,22 +1410,21 @@ Phase 7: Implement one LangChain-powered backend bonus feature and finalize the 
 
 ## Acceptance Criteria
 
-* Report endpoint works with real database assets.
-* Report is organization-scoped.
-* LLM does not receive assets from other organizations.
-* Response includes evidence asset IDs.
-* Missing API key or model errors are handled gracefully.
-* Tests do not require a real LLM call.
 * Evaluator can run the project with Docker Compose.
+* Evaluator can seed organizations and users.
+* Evaluator can log in with seeded users.
 * README explains all major design decisions.
+* README clearly documents all assumptions.
 * No secrets are committed.
 * Tests pass.
 * Linting passes.
+* Report endpoint works with real database assets if implemented.
+* Report is organization-scoped if implemented.
+* LLM does not receive assets from other organizations if implemented.
+* Tests do not require a real LLM call if LangChain is implemented.
 
 ---
 
-
-
 The final project should tell a clear story:
 
-This is not just a CRUD API. It is a security-aware, tenant-isolated, lifecycle-aware asset management backend with production-minded authentication, authorization, idempotent import behavior, relationship graph modeling, automated tests, CI, rate limiting, and a grounded AI analysis capability.
+This is not just a CRUD API. It is a security-aware, tenant-isolated, lifecycle-aware asset management backend with seeded evaluation users, JWT authentication, RBAC, idempotent import behavior, relationship graph modeling, automated tests, CI, rate limiting, and an optional grounded AI analysis capability.
