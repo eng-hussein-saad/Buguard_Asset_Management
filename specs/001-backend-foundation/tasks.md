@@ -31,13 +31,13 @@
 
 **Purpose**: Initialize the Python backend project, package structure, and quality tooling baseline.
 
-- [ ] T001 Create backend package directories and `__init__.py` files in app/, app/api/, app/api/routes/, app/core/, app/db/, app/models/, app/repositories/, app/schemas/, app/services/, and tests/
-- [ ] T002 Initialize uv Python 3.13 project metadata and dependencies in pyproject.toml
-- [ ] T003 Generate dependency lockfile for the configured dependencies in uv.lock
-- [ ] T004 [P] Configure Ruff lint settings in pyproject.toml
-- [ ] T005 [P] Configure mypy type-check settings for app/ in pyproject.toml
-- [ ] T006 [P] Configure pytest and pytest-asyncio settings in pyproject.toml
-- [ ] T007 [P] Create Docker image build instructions for the API service in Dockerfile
+- [X] T001 Create backend package directories and `__init__.py` files in app/, app/api/, app/api/routes/, app/core/, app/db/, app/models/, app/repositories/, app/schemas/, app/services/, and tests/
+- [X] T002 Initialize uv Python 3.13 project metadata and dependencies in pyproject.toml
+- [X] T003 Generate dependency lockfile for the configured dependencies in uv.lock
+- [X] T004 [P] Configure Ruff lint settings in pyproject.toml
+- [X] T005 [P] Configure mypy type-check settings for app/ in pyproject.toml
+- [X] T006 [P] Configure pytest and pytest-asyncio settings in pyproject.toml
+- [X] T007 [P] Create Docker image build instructions for the API service in Dockerfile
 
 ---
 
@@ -47,14 +47,14 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T008 Implement sanitized configuration error type in app/core/errors.py
-- [ ] T009 Implement Pydantic settings with required `DATABASE_URL` validation in app/core/config.py
-- [ ] T010 Implement async SQLAlchemy engine and session factory using settings in app/db/session.py
-- [ ] T011 [P] Expose shared SQLAlchemy metadata for future model discovery in app/db/base.py
-- [ ] T012 [P] Implement FastAPI dependency for async database sessions in app/api/deps.py
-- [ ] T013 Implement FastAPI application creation and router registration in app/main.py
-- [ ] T014 [P] Create placeholder security module without Phase 2 auth behavior in app/core/security.py
-- [ ] T015 [P] Document safe placeholder database configuration in .env.example
+- [X] T008 Implement sanitized configuration error type in app/core/errors.py
+- [X] T009 Implement Pydantic settings with required `DATABASE_URL` validation in app/core/config.py
+- [X] T010 Implement async SQLAlchemy engine and session factory using settings in app/db/session.py
+- [X] T011 [P] Expose shared SQLAlchemy metadata for future model discovery in app/db/base.py
+- [X] T012 [P] Implement FastAPI dependency for async database sessions in app/api/deps.py
+- [X] T013 Implement FastAPI application creation and router registration in app/main.py
+- [X] T014 [P] Create placeholder security module without Phase 2 auth behavior in app/core/security.py
+- [X] T015 [P] Document safe placeholder database configuration in .env.example
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel.
 
@@ -70,14 +70,14 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T016 [P] [US1] Add automated health endpoint test for exact response body in tests/test_health.py
-- [ ] T017 [P] [US1] Add OpenAPI contract alignment test for `/health` in tests/test_health.py
+- [X] T016 [P] [US1] Add automated health endpoint test for exact response body in tests/test_health.py
+- [X] T017 [P] [US1] Add OpenAPI contract alignment test for `/health` in tests/test_health.py
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Implement health route returning `{"status":"ok"}` in app/api/routes/health.py
-- [ ] T019 [US1] Register health router with the application in app/main.py
-- [ ] T020 [US1] Verify the local ASGI entry point `app.main:app` works with Uvicorn in app/main.py
+- [X] T018 [US1] Implement health route returning `{"status":"ok"}` in app/api/routes/health.py
+- [X] T019 [US1] Register health router with the application in app/main.py
+- [X] T020 [US1] Verify the local ASGI entry point `app.main:app` works with Uvicorn in app/main.py
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently.
 
@@ -93,17 +93,17 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T021 [P] [US2] Add configuration-missing startup failure test in tests/test_config.py
-- [ ] T022 [P] [US2] Add malformed `DATABASE_URL` sanitized failure test in tests/test_config.py
+- [X] T021 [P] [US2] Add configuration-missing startup failure test in tests/test_config.py
+- [X] T022 [P] [US2] Add malformed `DATABASE_URL` sanitized failure test in tests/test_config.py
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Add API and PostgreSQL services with `DATABASE_URL` wiring in docker-compose.yml
-- [ ] T024 [US2] Ensure Docker image starts Uvicorn with `app.main:app` in Dockerfile
-- [ ] T025 [US2] Document local install, startup, environment, and health verification commands in README.md
-- [ ] T026 [US2] Document Docker Compose startup, default ports, and health verification commands in README.md
-- [ ] T027 [US2] Document sanitized missing-configuration behavior in README.md
-- [ ] T028 [US2] Verify API-to-PostgreSQL reachability in Docker Compose using app/db/session.py to execute a minimal `SELECT 1` smoke check from the API container and document the result in README.md
+- [X] T023 [US2] Add API and PostgreSQL services with `DATABASE_URL` wiring in docker-compose.yml
+- [X] T024 [US2] Ensure Docker image starts Uvicorn with `app.main:app` in Dockerfile
+- [X] T025 [US2] Document local install, startup, environment, and health verification commands in README.md
+- [X] T026 [US2] Document Docker Compose startup, default ports, and health verification commands in README.md
+- [X] T027 [US2] Document sanitized missing-configuration behavior in README.md
+- [X] T028 [US2] Verify API-to-PostgreSQL reachability in Docker Compose using app/db/session.py to execute a minimal `SELECT 1` smoke check from the API container and document the result in README.md
 
 **Checkpoint**: User Stories 1 and 2 should both work independently.
 
@@ -119,16 +119,16 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T029 [P] [US3] Add database session factory configuration test in tests/test_db_session.py
-- [ ] T030 [P] [US3] Add Alembic configuration smoke test in tests/test_alembic.py
+- [X] T029 [P] [US3] Add database session factory configuration test in tests/test_db_session.py
+- [X] T030 [P] [US3] Add Alembic configuration smoke test in tests/test_alembic.py
 
 ### Implementation for User Story 3
 
-- [ ] T031 [US3] Initialize Alembic project configuration in alembic.ini
-- [ ] T032 [US3] Configure Alembic async environment and metadata import in alembic/env.py
-- [ ] T033 [P] [US3] Create Alembic versions directory placeholder in alembic/versions/.gitkeep
-- [ ] T034 [US3] Document no-op migration verification command in README.md
-- [ ] T035 [US3] Confirm no Phase 2 domain models or placeholder schema migrations are added under app/models/ and alembic/versions/
+- [X] T031 [US3] Initialize Alembic project configuration in alembic.ini
+- [X] T032 [US3] Configure Alembic async environment and metadata import in alembic/env.py
+- [X] T033 [P] [US3] Create Alembic versions directory placeholder in alembic/versions/.gitkeep
+- [X] T034 [US3] Document no-op migration verification command in README.md
+- [X] T035 [US3] Confirm no Phase 2 domain models or placeholder schema migrations are added under app/models/ and alembic/versions/
 
 **Checkpoint**: User Story 3 should be independently verifiable through the migration readiness command.
 
@@ -142,15 +142,15 @@
 
 ### Tests for User Story 4
 
-- [ ] T036 [P] [US4] Add test package initialization in tests/__init__.py
-- [ ] T037 [P] [US4] Add any shared pytest fixtures for app creation and environment isolation in tests/conftest.py
+- [X] T036 [P] [US4] Add test package initialization in tests/__init__.py
+- [X] T037 [P] [US4] Add any shared pytest fixtures for app creation and environment isolation in tests/conftest.py
 
 ### Implementation for User Story 4
 
-- [ ] T038 [US4] Ensure `uv run pytest` passes with health and configuration tests in tests/
-- [ ] T039 [US4] Ensure `uv run ruff check .` passes for app/, tests/, and configuration files in pyproject.toml
-- [ ] T040 [US4] Ensure `uv run mypy app` passes for the backend package in app/
-- [ ] T041 [US4] Document test, lint, and type-check commands in README.md
+- [X] T038 [US4] Ensure `uv run pytest` passes with health and configuration tests in tests/
+- [X] T039 [US4] Ensure `uv run ruff check .` passes for app/, tests/, and configuration files in pyproject.toml
+- [X] T040 [US4] Ensure `uv run mypy app` passes for the backend package in app/
+- [X] T041 [US4] Document test, lint, and type-check commands in README.md
 
 **Checkpoint**: All selected user stories should now be independently functional.
 
@@ -160,12 +160,12 @@
 
 **Purpose**: Final validation and cleanup across the Phase 1 foundation.
 
-- [ ] T042 [P] Align README setup notes with specs/001-backend-foundation/quickstart.md
-- [ ] T043 [P] Verify `.env.example` contains placeholders only and no committed secrets in .env.example
-- [ ] T044 [P] Verify Phase 1 contract remains limited to `GET /health` in specs/001-backend-foundation/contracts/openapi.yaml
-- [ ] T045 Run local quickstart validation and record any deviations in README.md
-- [ ] T046 Run Docker Compose quickstart validation, including API-to-PostgreSQL reachability, and record any deviations in README.md
-- [ ] T047 Run final quality gate commands from README.md: `uv run pytest`, `uv run ruff check .`, and `uv run mypy app`
+- [X] T042 [P] Align README setup notes with specs/001-backend-foundation/quickstart.md
+- [X] T043 [P] Verify `.env.example` contains placeholders only and no committed secrets in .env.example
+- [X] T044 [P] Verify Phase 1 contract remains limited to `GET /health` in specs/001-backend-foundation/contracts/openapi.yaml
+- [X] T045 Run local quickstart validation and record any deviations in README.md
+- [X] T046 Run Docker Compose quickstart validation, including API-to-PostgreSQL reachability, and record any deviations in README.md
+- [X] T047 Run final quality gate commands from README.md: `uv run pytest`, `uv run ruff check .`, and `uv run mypy app`
 
 ---
 
@@ -260,3 +260,4 @@ Task: "T037 [P] [US4] Add any shared pytest fixtures for app creation and enviro
 - [Story] label maps task to a specific user story for traceability.
 - Phase 1 must not add authentication, tenant models, asset models, imports, relationships, rate limiting, caching, CI, or AI analysis behavior.
 - Each user story should be independently completable and testable.
+

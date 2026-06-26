@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 
 # Python-generated files
 __pycache__/
@@ -7,6 +9,21 @@ build/
 dist/
 wheels/
 *.egg-info
+*.log
 
 # Virtual environments
 .venv
+venv/
+
+# Tooling and OS/editor files
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
