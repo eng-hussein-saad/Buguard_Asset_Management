@@ -1,0 +1,34 @@
+openapi: 3.1.0
+info:
+  title: Buguard Asset Management API - Backend Foundation
+  version: 0.1.0
+  description: Phase 1 contract for the minimal backend availability endpoint.
+paths:
+  /health:
+    get:
+      summary: Check application availability
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        "200":
+          description: Application is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: ok
