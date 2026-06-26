@@ -22,7 +22,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+import app.db.base  # noqa: F401
 from app.core.config import Settings, get_settings
+
 
 # Build the async database engine from application settings.
 def create_engine(settings: Settings | None = None) -> AsyncEngine:

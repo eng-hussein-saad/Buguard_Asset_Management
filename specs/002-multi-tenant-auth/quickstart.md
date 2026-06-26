@@ -139,6 +139,22 @@ uv run pytest
 
 Expected outcome: all checks pass before Phase 2 is considered complete.
 
+## Local Verification Notes
+
+If PostgreSQL is not running locally, `uv run alembic upgrade head` and
+`uv run python scripts/seed.py` will fail while attempting to connect to the
+configured database. Start Docker Compose or point `DATABASE_URL` at a reachable
+PostgreSQL instance before running those two checks.
+
+Verification on 2026-06-27:
+
+- `uv run alembic upgrade head` reached asyncpg and failed with
+  `ConnectionRefusedError: [WinError 1225] The remote computer refused the
+  network connection`.
+- `uv run python scripts/seed.py` was run twice after fixing the script import
+  path; both runs reached asyncpg and failed with the same refused PostgreSQL
+  connection.
+
 ## Documentation Checks
 
 README must document:

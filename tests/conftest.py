@@ -1,8 +1,10 @@
 import os
 from collections.abc import Iterator
 
+import app.db.base  # noqa: F401
 import pytest
 from fastapi import FastAPI
+
 
 # Force tests to use the test database and reset cached settings.
 @pytest.fixture(autouse=True)

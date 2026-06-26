@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from app.core.config import Settings, get_settings
 from app.core.errors import ConfigurationError
@@ -7,7 +9,9 @@ from app.core.errors import ConfigurationError
 # The error should be user-friendly and should not expose raw Pydantic details.
 def test_missing_database_url_fails_with_sanitized_error(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     get_settings.cache_clear()
 

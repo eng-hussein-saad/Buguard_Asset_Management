@@ -3,7 +3,6 @@ from app.core.config import Settings
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 
-
 # Verify that create_engine() builds an async SQLAlchemy engine
 # using the DATABASE_URL provided through Settings.
 @pytest.mark.asyncio

@@ -1,12 +1,14 @@
 # Buguard Asset Management Backend
 
-Phase 1 establishes the backend foundation for the Buguard Asset Management
-API. The current scope is intentionally small: a FastAPI app, a `/health`
-endpoint, required environment configuration, async PostgreSQL session
-scaffolding, Alembic readiness, Docker Compose, and baseline quality checks.
+The backend provides the FastAPI foundation for Buguard Asset Management plus
+the Phase 2 multi-tenant authentication slice. It includes health checks, async
+PostgreSQL sessions, Alembic migrations, seeded evaluation tenants, login,
+refresh, logout, current-user auth, tenant ownership helpers, and reusable RBAC
+checks.
 
-Later tenant, authentication, asset, import, relationship, caching, and AI
-features are out of scope for this phase.
+Public registration, public organization creation, membership management,
+organization switching, full asset CRUD, bulk import, graph retrieval, caching,
+and AI analysis are out of scope for this phase.
 
 ## Prerequisites
 
@@ -20,11 +22,19 @@ Create a local `.env` from `.env.example` and set a development database URL:
 
 ```bash
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/buguard
+JWT_SECRET_KEY=change-me-in-local-dev
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
 `DATABASE_URL` is required. If it is missing or malformed, the application fails
 startup with a sanitized configuration error that does not print the provided
 secret value.
+
+`JWT_SECRET_KEY` must be changed in real deployments and kept local-only. The
+default access-token lifetime is 15 minutes and the default refresh-token
+lifetime is 7 days.
 
 ## Install
 
@@ -90,17 +100,86 @@ Expected output:
 
 ## Alembic
 
-Phase 1 creates Alembic configuration only. It does not add domain models or
-placeholder migrations.
-
 With `DATABASE_URL` configured:
 
 ```bash
-uv run alembic current
+uv run alembic upgrade head
 ```
 
-Expected outcome: Alembic connects and exits successfully before any domain
-schema migrations exist.
+Expected outcome: tables exist for organizations, users, refresh tokens,
+assets, and asset relationships.
+
+## Seed Evaluation Data
+
+```bash
+uv run python scripts/seed.py
+uv run python scripts/seed.py
+```
+
+The second run is idempotent. Seeded credentials:
+
+```text
+admin@example.com / password123
+analyst@example.com / password123
+viewer@example.com / password123
+other-admin@example.com / password123
+```
+
+The first three users belong to the `demo` organization. The fourth user
+belongs to the `other` organization.
+
+## Authentication
+
+Log in:
+
+```bash
+curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password123"}'
+```
+
+The response includes `access_token`, `refresh_token`, `token_type: bearer`, and
+`expires_in: 900`. Access tokens contain the user id, organization id, role, and
+expiry. Refresh tokens are opaque, stored only as hashes, and rotated on every
+successful refresh.
+
+Current user:
+
+```bash
+curl -s http://localhost:8000/auth/me \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Refresh:
+
+```bash
+curl -s -X POST http://localhost:8000/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<refresh_token>"}'
+```
+
+Logout:
+
+```bash
+curl -i -X POST http://localhost:8000/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<replacement_refresh_token>"}'
+```
+
+## Tenant Isolation and Roles
+
+Tenant-owned resources derive `organization_id` only from the authenticated
+user context. Clients must not supply or override organization ownership.
+Cross-organization asset access returns 404, and relationships are allowed only
+when both assets belong to the authenticated user's organization.
+
+Role matrix:
+
+| Role | Allowed |
+| --- | --- |
+| viewer | Read assets, relationships, and graph data |
+| analyst | Viewer permissions plus asset create/update, bulk import, stale marking, and relationship creation |
+| admin | Analyst permissions plus delete/archive operations |
 
 ## Quality Checks
 

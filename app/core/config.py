@@ -11,6 +11,16 @@ class Settings(BaseSettings):
 
     app_name: str = "Buguard Asset Management API"
     database_url: PostgresDsn = Field(alias="DATABASE_URL")
+    jwt_secret_key: str = Field(
+        default="change-me-in-local-dev", alias="JWT_SECRET_KEY"
+    )
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(
+        default=15, alias="ACCESS_TOKEN_EXPIRE_MINUTES", ge=1
+    )
+    refresh_token_expire_days: int = Field(
+        default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS", ge=1
+    )
 
 
 def _sanitize_settings_error(error: ValidationError) -> str:

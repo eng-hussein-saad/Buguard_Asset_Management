@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 # Verify that the required Alembic configuration files and folders exist.
 def test_alembic_configuration_files_exist() -> None:
     assert Path("alembic.ini").is_file()

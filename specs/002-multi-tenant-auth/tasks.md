@@ -18,12 +18,12 @@
 
 **Purpose**: Add Phase 2 dependencies, folders, configuration placeholders, and migration scaffolding.
 
-- [ ] T001 Add `python-jose[cryptography]` and `passlib[bcrypt]` runtime dependencies in `pyproject.toml`
-- [ ] T002 Run dependency resolution and update `uv.lock`
-- [ ] T003 [P] Create Phase 2 test directories `tests/contract/`, `tests/integration/`, and `tests/unit/`
-- [ ] T004 [P] Create seed script placeholder in `scripts/seed.py`
-- [ ] T005 [P] Create auth route module placeholder in `app/api/routes/auth.py`
-- [ ] T006 [P] Create auth schema module placeholder in `app/schemas/auth.py`
+- [X] T001 Add `python-jose[cryptography]` and `passlib[bcrypt]` runtime dependencies in `pyproject.toml`
+- [X] T002 Run dependency resolution and update `uv.lock`
+- [X] T003 [P] Create Phase 2 test directories `tests/contract/`, `tests/integration/`, and `tests/unit/`
+- [X] T004 [P] Create seed script placeholder in `scripts/seed.py`
+- [X] T005 [P] Create auth route module placeholder in `app/api/routes/auth.py`
+- [X] T006 [P] Create auth schema module placeholder in `app/schemas/auth.py`
 
 ---
 
@@ -33,15 +33,15 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T007 Create SQLAlchemy timestamp and UUID conventions for Phase 2 models in `app/models/__init__.py`
-- [ ] T008 [P] Add auth and token configuration fields in `app/core/config.py`
-- [ ] T009 [P] Add JWT password hashing and refresh token hashing helpers in `app/core/security.py`
-- [ ] T010 [P] Add structured authentication, authorization, duplicate, and not-found errors in `app/core/errors.py`
-- [ ] T011 Create Alembic migration for organizations, users, refresh_tokens, assets, and asset_relationships in `alembic/versions/002_multi_tenant_auth.py`
-- [ ] T012 Register all Phase 2 SQLAlchemy models with Alembic metadata in `app/db/base.py`
-- [ ] T013 [P] Update `.env.example` with `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, and `REFRESH_TOKEN_EXPIRE_DAYS`
-- [ ] T014 [P] Add shared async test database/session fixtures for Phase 2 tests in `tests/conftest.py`
-- [ ] T015 Include `app.api.routes.auth` in the FastAPI router setup in `app/main.py`
+- [X] T007 Create SQLAlchemy timestamp and UUID conventions for Phase 2 models in `app/models/__init__.py`
+- [X] T008 [P] Add auth and token configuration fields in `app/core/config.py`
+- [X] T009 [P] Add JWT password hashing and refresh token hashing helpers in `app/core/security.py`
+- [X] T010 [P] Add structured authentication, authorization, duplicate, and not-found errors in `app/core/errors.py`
+- [X] T011 Create Alembic migration for organizations, users, refresh_tokens, assets, and asset_relationships in `alembic/versions/002_multi_tenant_auth.py`
+- [X] T012 Register all Phase 2 SQLAlchemy models with Alembic metadata in `app/db/base.py`
+- [X] T013 [P] Update `.env.example` with `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, and `REFRESH_TOKEN_EXPIRE_DAYS`
+- [X] T014 [P] Add shared async test database/session fixtures for Phase 2 tests in `tests/conftest.py`
+- [X] T015 Include `app.api.routes.auth` in the FastAPI router setup in `app/main.py`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel.
 
@@ -55,18 +55,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Add seed idempotency integration tests in `tests/integration/test_seed.py`
-- [ ] T017 [P] [US1] Add seeded user ownership and role integrity tests in `tests/integration/test_seed.py`
+- [X] T016 [P] [US1] Add seed idempotency integration tests in `tests/integration/test_seed.py`
+- [X] T017 [P] [US1] Add seeded user ownership and role integrity tests in `tests/integration/test_seed.py`
 
 ### Implementation for User Story 1
 
-- [ ] T018 [P] [US1] Implement `Organization` model in `app/models/organization.py`
-- [ ] T019 [P] [US1] Implement `User` model and role constraints in `app/models/user.py`
-- [ ] T020 [P] [US1] Implement organization repository helpers in `app/repositories/organizations.py`
-- [ ] T021 [P] [US1] Implement user repository helpers in `app/repositories/users.py`
-- [ ] T022 [US1] Implement idempotent organization and user seeding in `scripts/seed.py`
-- [ ] T023 [US1] Hash seeded user passwords with `app/core/security.py` in `scripts/seed.py`
-- [ ] T024 [US1] Document seed command and seeded credentials in `README.md`
+- [X] T018 [P] [US1] Implement `Organization` model in `app/models/organization.py`
+- [X] T019 [P] [US1] Implement `User` model and role constraints in `app/models/user.py`
+- [X] T020 [P] [US1] Implement organization repository helpers in `app/repositories/organizations.py`
+- [X] T021 [P] [US1] Implement user repository helpers in `app/repositories/users.py`
+- [X] T022 [US1] Implement idempotent organization and user seeding in `scripts/seed.py`
+- [X] T023 [US1] Hash seeded user passwords with `app/core/security.py` in `scripts/seed.py`
+- [X] T024 [US1] Document seed command and seeded credentials in `README.md`
 
 **Checkpoint**: User Story 1 is fully functional and testable independently.
 
@@ -80,21 +80,21 @@
 
 ### Tests for User Story 2
 
-- [ ] T025 [P] [US2] Add OpenAPI contract tests for `/auth/login`, `/auth/refresh`, `/auth/logout`, and `/auth/me` in `tests/contract/test_auth_api.py`
-- [ ] T026 [P] [US2] Add end-to-end login, current-user, refresh rotation, and logout tests in `tests/integration/test_auth_flow.py`
-- [ ] T027 [P] [US2] Add security unit tests for password hashing, JWT claims, token expiry, refresh token hashing, and no raw refresh-token log leakage in `tests/unit/test_security.py`
-- [ ] T028 [P] [US2] Add token service tests for expired, revoked, malformed, unknown, and reused refresh tokens in `tests/unit/test_token_service.py`
+- [X] T025 [P] [US2] Add OpenAPI contract tests for `/auth/login`, `/auth/refresh`, `/auth/logout`, and `/auth/me` in `tests/contract/test_auth_api.py`
+- [X] T026 [P] [US2] Add end-to-end login, current-user, refresh rotation, and logout tests in `tests/integration/test_auth_flow.py`
+- [X] T027 [P] [US2] Add security unit tests for password hashing, JWT claims, token expiry, refresh token hashing, and no raw refresh-token log leakage in `tests/unit/test_security.py`
+- [X] T028 [P] [US2] Add token service tests for expired, revoked, malformed, unknown, and reused refresh tokens in `tests/unit/test_token_service.py`
 
 ### Implementation for User Story 2
 
-- [ ] T029 [P] [US2] Implement `RefreshToken` model in `app/models/refresh_token.py`
-- [ ] T030 [P] [US2] Implement auth request and response schemas in `app/schemas/auth.py`
-- [ ] T031 [P] [US2] Implement auth repository methods for users and refresh tokens in `app/repositories/auth.py`
-- [ ] T032 [US2] Implement credential validation, access token creation, refresh rotation, and logout revocation in `app/services/auth.py`
-- [ ] T033 [US2] Implement authenticated user dependency and access-token validation in `app/api/deps.py`
-- [ ] T034 [US2] Implement `/auth/login`, `/auth/refresh`, `/auth/logout`, and `/auth/me` handlers in `app/api/routes/auth.py`
-- [ ] T035 [US2] Ensure inactive users and invalid credentials return generic authentication failures in `app/services/auth.py`
-- [ ] T036 [US2] Document auth flow and absence of public registration, organization creation, and organization switching in `README.md`
+- [X] T029 [P] [US2] Implement `RefreshToken` model in `app/models/refresh_token.py`
+- [X] T030 [P] [US2] Implement auth request and response schemas in `app/schemas/auth.py`
+- [X] T031 [P] [US2] Implement auth repository methods for users and refresh tokens in `app/repositories/auth.py`
+- [X] T032 [US2] Implement credential validation, access token creation, refresh rotation, and logout revocation in `app/services/auth.py`
+- [X] T033 [US2] Implement authenticated user dependency and access-token validation in `app/api/deps.py`
+- [X] T034 [US2] Implement `/auth/login`, `/auth/refresh`, `/auth/logout`, and `/auth/me` handlers in `app/api/routes/auth.py`
+- [X] T035 [US2] Ensure inactive users and invalid credentials return generic authentication failures in `app/services/auth.py`
+- [X] T036 [US2] Document auth flow and absence of public registration, organization creation, and organization switching in `README.md`
 
 **Checkpoint**: User Story 2 is fully functional and testable independently.
 
@@ -108,17 +108,17 @@
 
 ### Tests for User Story 3
 
-- [ ] T037 [P] [US3] Add tenant-scoped asset and duplicate-value integration tests in `tests/integration/test_tenant_isolation.py`
-- [ ] T038 [P] [US3] Add cross-organization asset 404 and relationship rejection tests in `tests/integration/test_tenant_isolation.py`
+- [X] T037 [P] [US3] Add tenant-scoped asset and duplicate-value integration tests in `tests/integration/test_tenant_isolation.py`
+- [X] T038 [P] [US3] Add cross-organization asset 404 and relationship rejection tests in `tests/integration/test_tenant_isolation.py`
 
 ### Implementation for User Story 3
 
-- [ ] T039 [P] [US3] Implement `Asset` model with organization-scoped uniqueness in `app/models/asset.py`
-- [ ] T040 [P] [US3] Implement `AssetRelationship` model with same-organization constraints in `app/models/asset.py`
-- [ ] T041 [P] [US3] Implement tenant-scoped asset and relationship repository methods in `app/repositories/assets.py` and `app/repositories/relationships.py`
-- [ ] T042 [US3] Implement tenant asset ownership and cross-tenant 404 checks in `app/services/tenant_assets.py`
-- [ ] T043 [US3] Implement same-organization relationship validation in `app/services/tenant_assets.py`
-- [ ] T044 [US3] Ensure protected dependencies derive organization ownership only from authenticated context in `app/api/deps.py`
+- [X] T039 [P] [US3] Implement `Asset` model with organization-scoped uniqueness in `app/models/asset.py`
+- [X] T040 [P] [US3] Implement `AssetRelationship` model with same-organization constraints in `app/models/asset.py`
+- [X] T041 [P] [US3] Implement tenant-scoped asset and relationship repository methods in `app/repositories/assets.py` and `app/repositories/relationships.py`
+- [X] T042 [US3] Implement tenant asset ownership and cross-tenant 404 checks in `app/services/tenant_assets.py`
+- [X] T043 [US3] Implement same-organization relationship validation in `app/services/tenant_assets.py`
+- [X] T044 [US3] Ensure protected dependencies derive organization ownership only from authenticated context in `app/api/deps.py`
 
 **Checkpoint**: User Story 3 is fully functional and testable independently.
 
@@ -132,16 +132,16 @@
 
 ### Tests for User Story 4
 
-- [ ] T045 [P] [US4] Add role matrix integration tests for viewer, analyst, and admin permissions in `tests/integration/test_rbac.py`
-- [ ] T046 [P] [US4] Add reusable RBAC service unit tests in `tests/unit/test_rbac.py`
+- [X] T045 [P] [US4] Add role matrix integration tests for viewer, analyst, and admin permissions in `tests/integration/test_rbac.py`
+- [X] T046 [P] [US4] Add reusable RBAC service unit tests in `tests/unit/test_rbac.py`
 
 ### Implementation for User Story 4
 
-- [ ] T047 [P] [US4] Implement role permission enum and action mapping for Phase 2 checks plus later asset CRUD, import, graph, lifecycle, and relationship operation categories in `app/services/rbac.py`
-- [ ] T048 [US4] Implement reusable FastAPI role dependency helpers in `app/api/deps.py`
-- [ ] T049 [US4] Wire RBAC checks into Phase 2 tenant asset and relationship ownership checks in `app/services/tenant_assets.py`
-- [ ] T050 [US4] Ensure forbidden actions return structured authorization failures in `app/core/errors.py`
-- [ ] T051 [US4] Document the viewer, analyst, and admin role matrix in `README.md`
+- [X] T047 [P] [US4] Implement role permission enum and action mapping for Phase 2 checks plus later asset CRUD, import, graph, lifecycle, and relationship operation categories in `app/services/rbac.py`
+- [X] T048 [US4] Implement reusable FastAPI role dependency helpers in `app/api/deps.py`
+- [X] T049 [US4] Wire RBAC checks into Phase 2 tenant asset and relationship ownership checks in `app/services/tenant_assets.py`
+- [X] T050 [US4] Ensure forbidden actions return structured authorization failures in `app/core/errors.py`
+- [X] T051 [US4] Document the viewer, analyst, and admin role matrix in `README.md`
 
 **Checkpoint**: User Story 4 is fully functional and testable independently.
 
@@ -155,15 +155,15 @@
 
 ### Tests for User Story 5
 
-- [ ] T052 [P] [US5] Add migration schema tests for Phase 2 tables and indexes in `tests/integration/test_schema.py`
-- [ ] T053 [P] [US5] Add data-integrity tests for unique emails, slugs, assets, and relationships in `tests/integration/test_schema.py`
+- [X] T052 [P] [US5] Add migration schema tests for Phase 2 tables and indexes in `tests/integration/test_schema.py`
+- [X] T053 [P] [US5] Add data-integrity tests for unique emails, slugs, assets, and relationships in `tests/integration/test_schema.py`
 
 ### Implementation for User Story 5
 
-- [ ] T054 [US5] Add database check constraints for user roles, asset types, asset statuses, and relationship types in `alembic/versions/002_multi_tenant_auth.py`
-- [ ] T055 [US5] Add lookup indexes for email, organization ownership, refresh token owner, asset lookup, and relationship lookup in `alembic/versions/002_multi_tenant_auth.py`
-- [ ] T056 [US5] Ensure SQLAlchemy model constraints match migration constraints in `app/models/organization.py`, `app/models/user.py`, `app/models/refresh_token.py`, and `app/models/asset.py`
-- [ ] T057 [US5] Verify Alembic autogenerate has no unexpected Phase 2 drift in `alembic/env.py`
+- [X] T054 [US5] Add database check constraints for user roles, asset types, asset statuses, and relationship types in `alembic/versions/002_multi_tenant_auth.py`
+- [X] T055 [US5] Add lookup indexes for email, organization ownership, refresh token owner, asset lookup, and relationship lookup in `alembic/versions/002_multi_tenant_auth.py`
+- [X] T056 [US5] Ensure SQLAlchemy model constraints match migration constraints in `app/models/organization.py`, `app/models/user.py`, `app/models/refresh_token.py`, and `app/models/asset.py`
+- [X] T057 [US5] Verify Alembic autogenerate has no unexpected Phase 2 drift in `alembic/env.py`
 
 **Checkpoint**: User Story 5 is fully functional and testable independently.
 
@@ -173,15 +173,15 @@
 
 **Purpose**: Documentation, verification, and cleanup across the complete Phase 2 slice.
 
-- [ ] T058 [P] Update `README.md` with migration, seed, auth flow, tenant isolation, role permissions, and Phase 2 scope notes
-- [ ] T059 [P] Update `specs/002-multi-tenant-auth/quickstart.md` if implementation commands differ from the planned commands
-- [ ] T060 [P] Review `.env.example` for safe placeholders and no committed secrets
-- [ ] T061 Run `uv run alembic upgrade head` and document any failure in `specs/002-multi-tenant-auth/quickstart.md`
-- [ ] T062 Run `uv run python scripts/seed.py` twice and document any failure in `specs/002-multi-tenant-auth/quickstart.md`
-- [ ] T063 Run `uv run pytest tests/contract tests/integration tests/unit`
-- [ ] T064 Run `uv run ruff check .`
-- [ ] T065 Run `uv run mypy app`
-- [ ] T066 Run `uv run pytest`
+- [X] T058 [P] Update `README.md` with migration, seed, auth flow, tenant isolation, role permissions, and Phase 2 scope notes
+- [X] T059 [P] Update `specs/002-multi-tenant-auth/quickstart.md` if implementation commands differ from the planned commands
+- [X] T060 [P] Review `.env.example` for safe placeholders and no committed secrets
+- [X] T061 Run `uv run alembic upgrade head` and document any failure in `specs/002-multi-tenant-auth/quickstart.md`
+- [X] T062 Run `uv run python scripts/seed.py` twice and document any failure in `specs/002-multi-tenant-auth/quickstart.md`
+- [X] T063 Run `uv run pytest tests/contract tests/integration tests/unit`
+- [X] T064 Run `uv run ruff check .`
+- [X] T065 Run `uv run mypy app`
+- [X] T066 Run `uv run pytest`
 
 ---
 
