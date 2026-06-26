@@ -10,6 +10,8 @@ The repository has already been initialized with Git, GitHub, uv, and Spec Kit. 
 
 The goal is not only to satisfy the mandatory backend requirements, but to demonstrate production-level backend thinking through multi-tenant organization isolation, JWT authentication, refresh tokens, role-based access control, relationship graph visualization, CI, rate limiting, optional caching, and one LangChain-powered backend analysis feature.
 
+Assumption: In this implementation, each user belongs to exactly one organization. Multi-tenancy is implemented at the organization data level: assets and relationships are scoped by organization_id, and all queries derive organization_id from the authenticated user context. Supporting users with roles across multiple organizations would be a future extension using a memberships table and organization switching.
+
 ---
 
 ## Global Architecture Target
@@ -232,7 +234,7 @@ Expected:
 
 Build the production-grade security and data ownership foundation.
 
-This phase combines multi-tenancy and authentication because they are tightly connected. The authenticated user determines the active organization, and all tenant-owned data must be scoped to that organization.
+This phase combines multi-tenancy and authentication because they are tightly connected. Each user belongs to exactly one organization, and all tenant-owned data must be scoped to that user's organization.
 
 ## Scope
 
@@ -241,7 +243,6 @@ Create models and migrations for:
 ```txt
 organizations
 users
-memberships
 refresh_tokens
 assets
 asset_relationships
@@ -251,9 +252,7 @@ asset_relationships
 
 ```mermaid
 erDiagram
-    ORGANIZATIONS ||--o{ MEMBERSHIPS : has
-    USERS ||--o{ MEMBERSHIPS : belongs_through
-
+    ORGANIZATIONS ||--o{ USERS : owns
     USERS ||--o{ REFRESH_TOKENS : owns
 
     ORGANIZATIONS ||--o{ ASSETS : owns
@@ -272,19 +271,13 @@ erDiagram
 
     USERS {
         uuid id PK
+        uuid organization_id FK
         string email
         string password_hash
+        string role
         bool is_active
         datetime created_at
         datetime updated_at
-    }
-
-    MEMBERSHIPS {
-        uuid id PK
-        uuid user_id FK
-        uuid organization_id FK
-        string role
-        datetime created_at
     }
 
     REFRESH_TOKENS {
@@ -341,11 +334,8 @@ UNIQUE (
 )
 ```
 
-Memberships:
-
-```sql
-UNIQUE (user_id, organization_id)
-```
+Users belong to exactly one organization through `users.organization_id`.
+Each user has one organization-level role stored on the user record.
 
 ## Auth Endpoints
 
@@ -397,8 +387,8 @@ Access tokens should include:
 ```json
 {
   "sub": "user_id",
-  "organization_id": "organization_id",
-  "role": "analyst",
+  "organization_id": "user_organization_id",
+  "role": "user_role",
   "exp": 1234567890
 }
 ```
@@ -410,8 +400,18 @@ Never accept `organization_id` from client input for tenant-owned resources.
 Always derive it from:
 
 ```txt
-current_user.organization_id
+authenticated user/JWT organization_id
 ```
+
+Every repository query for tenant-owned data must filter by `organization_id`.
+
+Every asset belongs to an organization.
+
+Every asset relationship belongs to an organization.
+
+Asset relationships must only connect assets from the same organization.
+
+Cross-organization asset access should return `404 Not Found` or `403 Forbidden`, depending on the project's error strategy.
 
 ## Refresh Token Rules
 
@@ -425,7 +425,7 @@ current_user.organization_id
 
 ```txt
 /speckit.specify
-Phase 2: Implement the multi-tenant database model, JWT authentication, refresh tokens, and role-based access control. Users belong to organizations through memberships. Assets and relationships must be scoped by organization_id. Login returns a short-lived JWT access token and a longer-lived refresh token. Access tokens include user id, active organization id, and role. Write operations require analyst or admin. Delete operations require admin. Refresh tokens must be stored hashed, support logout revocation, and never be logged.
+Phase 2: Implement the multi-tenant database model, JWT authentication, refresh tokens, and role-based access control. Each user belongs to exactly one organization and has one organization-level role stored on the user record. Assets and relationships must be scoped by organization_id. Login returns a short-lived JWT access token and a longer-lived refresh token. Access tokens include user id, user organization id, and user role. Write operations require analyst or admin. Delete operations require admin. Refresh tokens must be stored hashed, support logout revocation, and never be logged.
 ```
 
 ## Deliverables
@@ -444,9 +444,9 @@ Phase 2: Implement the multi-tenant database model, JWT authentication, refresh 
 ## Acceptance Criteria
 
 * Migrations apply successfully.
-* Users can register or be seeded with an organization.
-* Users can log in.
-* Login returns access and refresh tokens.
+* Each user belongs to exactly one organization.
+* A user has one role within their organization.
+* JWT access tokens include user id, organization id, and role.
 * Protected routes reject unauthenticated users.
 * Viewer cannot perform write operations.
 * Analyst can perform write operations except delete.

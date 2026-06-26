@@ -32,6 +32,7 @@ def test_database_reachability_smoke_helper_is_documented() -> None:
     assert callable(check_database_reachability)
 
 
+# Verify that an async session factory can be created from the async engine.
 @pytest.mark.asyncio
 async def test_async_sessionmaker_can_be_configured() -> None:
     from app.db.session import create_engine
