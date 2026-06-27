@@ -37,11 +37,12 @@ that differ only by casing or surrounding whitespace.
 
 ## Decision: Use server processing time for lifecycle timestamps
 
-**Rationale**: The spec explicitly rejects client-supplied first-seen,
-last-seen, observed-at, or equivalent timestamp fields. Using one server-side
-timestamp per accepted record gives deterministic lifecycle behavior, prevents
-clients from rewriting observation history, and keeps first-seen preservation
-simple.
+**Rationale**: The spec explicitly ignores only client-supplied first-seen and
+last-seen fields because those are server-owned model fields. Other
+client-supplied timestamp fields are unsupported import fields. Using one
+server-side timestamp per accepted record gives deterministic lifecycle
+behavior, prevents clients from rewriting observation history, and keeps
+first-seen preservation simple.
 
 **Alternatives considered**: Accepting client observation timestamps was
 rejected by clarification and would make trust, validation, and ordering rules

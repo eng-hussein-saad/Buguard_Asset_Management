@@ -46,15 +46,15 @@ Represents one asset observation inside a batch.
 - `organization_id`
 - `first_seen`
 - `last_seen`
-- `observed_at`
-- Any equivalent client timestamp field used to control lifecycle timestamps
 
 **Validation Rules**
 
 - Missing or blank `value` fails only that record.
 - Unsupported `type` fails only that record.
 - Unsupported `status` fails only that record.
-- Malformed `tags`, `metadata`, or other import fields fail only that record.
+- Malformed `tags`, `metadata`, or unknown import fields fail only that record;
+  known ignored fields are limited to client-supplied `first_seen` and
+  `last_seen`.
 - Valid records are processed even when other records fail.
 
 ## Asset Lifecycle State

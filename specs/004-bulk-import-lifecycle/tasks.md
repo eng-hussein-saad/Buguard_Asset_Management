@@ -33,13 +33,13 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 [P] Add AssetImportBatch, AssetImportRecord, AssetImportSummary, and AssetImportError schemas with extra-field rejection and docstrings in app/schemas/assets.py
+- [ ] T005 [P] Add AssetImportBatch, AssetImportRecord, AssetImportSummary, and AssetImportError schemas with extra-field rejection, explicit ignored lifecycle timestamp aliases, and docstrings in app/schemas/assets.py
 - [ ] T006 [P] Add contract tests for POST /assets/import OpenAPI request, response, and error documentation in tests/contract/test_assets_api.py
 - [ ] T007 Add organization-scoped lookup helper by organization_id, type, and canonical value for import deduplication in app/repositories/assets.py
 - [ ] T008 Add repository helper for import-safe asset updates of status, last_seen, source, tags, and metadata in app/repositories/assets.py
 - [ ] T009 Add import merge helpers for ordered tag de-duplication and shallow newest-wins metadata merge in app/services/tenant_assets.py
 - [ ] T010 Add import lifecycle helper for new, active, stale, and archived status transitions in app/services/tenant_assets.py
-- [ ] T011 Add per-record import validation helper that returns stable index and reason failures without trusting organization_id or timestamp fields in app/services/tenant_assets.py
+- [ ] T011 Add per-record import validation helper that returns stable index and reason failures, rejects organization_id and unknown timestamp fields, ignores only client first_seen and last_seen fields, and never trusts client ownership or timestamps in app/services/tenant_assets.py
 - [ ] T012 Add import summary status mapping helper for HTTP 200, 207, and 422 outcomes in app/services/tenant_assets.py
 - [ ] T013 Add concise docstrings to all new import schema, repository, and service helpers in app/schemas/assets.py, app/repositories/assets.py, and app/services/tenant_assets.py
 
@@ -90,7 +90,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] Apply server processing time to created and accepted re-imported records while ignoring client first_seen, last_seen, observed_at, and equivalent fields in app/services/tenant_assets.py
+- [ ] T030 [US2] Apply server processing time to created and accepted re-imported records while ignoring only client first_seen and last_seen fields and rejecting unknown timestamp fields in app/services/tenant_assets.py
 - [ ] T031 [US2] Preserve first_seen and update last_seen during existing asset import updates in app/services/tenant_assets.py and app/repositories/assets.py
 - [ ] T032 [US2] Apply ordered tag de-duplication and shallow metadata merge for import updates in app/services/tenant_assets.py
 - [ ] T033 [US2] Implement stale-to-active reactivation on accepted re-sighting in app/services/tenant_assets.py
@@ -112,7 +112,7 @@
 - [ ] T036 [P] [US3] Add contract tests for HTTP 207 and HTTP 422 AssetImportSummary response shape in tests/contract/test_assets_api.py
 - [ ] T037 [P] [US3] Add integration tests for mixed valid, missing value, blank value, unsupported type, and unsupported status records returning HTTP 207 in tests/integration/test_asset_import_lifecycle.py
 - [ ] T038 [P] [US3] Add integration tests for all-record failure returning HTTP 422 without creating or updating assets in tests/integration/test_asset_import_lifecycle.py
-- [ ] T039 [P] [US3] Add integration tests for malformed tags, metadata, extra fields, and client organization_id being rejected per record in tests/integration/test_asset_import_lifecycle.py
+- [ ] T039 [P] [US3] Add integration tests for malformed tags, metadata, unknown extra fields including observed_at, and client organization_id being rejected per record, while client first_seen and last_seen fields are ignored, in tests/integration/test_asset_import_lifecycle.py
 - [ ] T040 [P] [US3] Add integration tests proving per-record import errors do not reveal cross-tenant asset data in tests/integration/test_asset_tenant_isolation.py
 
 ### Implementation for User Story 3

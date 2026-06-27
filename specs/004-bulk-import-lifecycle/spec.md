@@ -136,7 +136,7 @@ As an analyst or admin, I need to mark assets as stale when they are no longer o
 - **FR-030**: System MUST validate imported asset status using the supported lifecycle statuses active, stale, and archived.
 - **FR-031**: System MUST reject import records with missing, blank, or malformed asset values.
 - **FR-032**: System MUST reject malformed tags, metadata, or other import fields for the affected record without crashing the entire batch.
-- **FR-033**: System MUST ignore any client-supplied first-seen, last-seen, observed-at, or equivalent timestamp fields in import records and MUST use server processing time for lifecycle timestamps.
+- **FR-033**: System MUST ignore any client-supplied first-seen or last-seen fields in import records and MUST use server processing time for lifecycle timestamps. Other client-supplied timestamp fields MUST be rejected as unsupported import fields.
 - **FR-034**: Import behavior MUST keep all reads, writes, duplicate checks, and lifecycle updates scoped to the authenticated organization.
 - **FR-035**: Structured domain errors MUST use the established shape `{ "error": { "code": "...", "message": "...", "details": {} } }` for domain failures outside per-record import errors.
 - **FR-036**: System MUST include tests for idempotent import, duplicate records within one batch, metadata merge behavior, tag merge behavior, malformed records, partial-failure and all-record-failure HTTP statuses, stale reactivation, archived asset import behavior, stale status update permissions, server-time lifecycle timestamps, and tenant isolation.
@@ -179,4 +179,4 @@ As an analyst or admin, I need to mark assets as stale when they are no longer o
 - Phase 4 is limited to bulk import, deduplication, lifecycle handling, import edge cases, and marking assets stale. Relationship APIs, graph retrieval, rate limiting, caching, CI expansion, and LangChain analysis remain outside this phase.
 - The mark-stale capability is exposed through existing asset update behavior using `PATCH /assets/{asset_id}` with `status=stale`.
 - Import metadata merge behavior uses shallow key-level merging unless a later clarification explicitly requires nested merge semantics.
-- Import lifecycle timestamps are controlled by the server: client-supplied first-seen, last-seen, observed-at, or equivalent fields are ignored, newly created assets use server processing time for first-seen and last-seen, and accepted re-sightings preserve first-seen while refreshing last-seen to server processing time.
+- Import lifecycle timestamps are controlled by the server: client-supplied first-seen and last-seen fields are ignored, other client-supplied timestamp fields are rejected as unsupported import fields, newly created assets use server processing time for first-seen and last-seen, and accepted re-sightings preserve first-seen while refreshing last-seen to server processing time.

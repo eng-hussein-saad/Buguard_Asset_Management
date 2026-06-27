@@ -168,9 +168,19 @@ components:
         metadata:
           type: object
           default: {}
+        first_seen:
+          type: string
+          format: date-time
+          description: Ignored when supplied; lifecycle timestamps are assigned by the server.
+        last_seen:
+          type: string
+          format: date-time
+          description: Ignored when supplied; lifecycle timestamps are assigned by the server.
       description: >
-        organization_id and lifecycle timestamps are not accepted. Asset
-        ownership and first_seen/last_seen values are controlled by the server.
+        organization_id is not accepted. Client-supplied lifecycle timestamps
+        are accepted only for first_seen and last_seen as known ignored fields;
+        asset ownership and first_seen/last_seen values are controlled by the
+        server. Other timestamp fields are unsupported import fields.
     AssetImportSummary:
       type: object
       required: [created, updated, failed, errors]
