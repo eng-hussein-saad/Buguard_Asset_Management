@@ -20,10 +20,10 @@
 
 **Purpose**: Confirm Phase 3 starts from the established backend foundation and add the missing asset API module skeleton.
 
-- [ ] T001 Verify existing FastAPI, SQLAlchemy, Alembic, auth, RBAC, and seed-user foundations against specs/003-asset-crud/plan.md
-- [ ] T002 [P] Create asset schema module skeleton in app/schemas/assets.py
-- [ ] T003 [P] Create asset route module skeleton in app/api/routes/assets.py
-- [ ] T004 Register the asset route module in app/main.py
+- [X] T001 Verify existing FastAPI, SQLAlchemy, Alembic, auth, RBAC, and seed-user foundations against specs/003-asset-crud/plan.md
+- [X] T002 [P] Create asset schema module skeleton in app/schemas/assets.py
+- [X] T003 [P] Create asset route module skeleton in app/api/routes/assets.py
+- [X] T004 Register the asset route module in app/main.py
 
 ---
 
@@ -33,13 +33,13 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 [P] Add asset type, status, sort, pagination, create, update, response, and error schema definitions in app/schemas/assets.py
-- [ ] T006 [P] Add `ASSET_NOT_FOUND` and `DUPLICATE_ASSET` AppError helpers in app/core/errors.py
-- [ ] T007 Add asset value normalization helpers for trim and domain/subdomain lowercase behavior in app/services/tenant_assets.py
-- [ ] T008 Add repository helpers for organization-scoped asset lookup and duplicate lookup in app/repositories/assets.py
-- [ ] T009 Add service permission helpers using existing RBAC permissions in app/services/tenant_assets.py
-- [ ] T010 Confirm Asset model fields, metadata alias handling, timestamps, tags, and uniqueness constraint support Phase 3 in app/models/asset.py
-- [ ] T011 [P] Add shared asset test fixtures and multi-tenant asset factories in tests/conftest.py
+- [X] T005 [P] Add asset type, status, sort, pagination, create, update, response, and error schema definitions in app/schemas/assets.py
+- [X] T006 [P] Add `ASSET_NOT_FOUND` and `DUPLICATE_ASSET` AppError helpers in app/core/errors.py
+- [X] T007 Add asset value normalization helpers for trim and domain/subdomain lowercase behavior in app/services/tenant_assets.py
+- [X] T008 Add repository helpers for organization-scoped asset lookup and duplicate lookup in app/repositories/assets.py
+- [X] T009 Add service permission helpers using existing RBAC permissions in app/services/tenant_assets.py
+- [X] T010 Confirm Asset model fields, metadata alias handling, timestamps, tags, and uniqueness constraint support Phase 3 in app/models/asset.py
+- [X] T011 [P] Add shared asset test fixtures and multi-tenant asset factories in tests/conftest.py
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in priority order or in parallel where dependencies allow.
 
@@ -53,20 +53,20 @@
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Add contract tests for POST /assets, GET /assets/{asset_id}, PATCH /assets/{asset_id}, and DELETE /assets/{asset_id} success and documented response shapes in tests/contract/test_assets_api.py
-- [ ] T013 [P] [US1] Add integration tests for analyst create/update/read and admin hard delete in tests/integration/test_asset_crud.py
-- [ ] T014 [P] [US1] Add integration tests for viewer mutation denial and analyst delete denial in tests/integration/test_asset_rbac.py
-- [ ] T015 [P] [US1] Add unit tests for trim and domain/subdomain lowercase normalization before create/update in tests/unit/test_asset_normalization.py
+- [X] T012 [P] [US1] Add contract tests for POST /assets, GET /assets/{asset_id}, PATCH /assets/{asset_id}, and DELETE /assets/{asset_id} success and documented response shapes in tests/contract/test_assets_api.py
+- [X] T013 [P] [US1] Add integration tests for analyst create/update/read and admin hard delete in tests/integration/test_asset_crud.py
+- [X] T014 [P] [US1] Add integration tests for viewer mutation denial and analyst delete denial in tests/integration/test_asset_rbac.py
+- [X] T015 [P] [US1] Add unit tests for trim and domain/subdomain lowercase normalization before create/update in tests/unit/test_asset_normalization.py
 
 ### Implementation for User Story 1
 
-- [ ] T016 [US1] Implement AssetCreate, AssetUpdate, AssetRead, and domain enum schemas with extra-field rejection in app/schemas/assets.py
-- [ ] T017 [US1] Implement create, detail, update, and hard-delete repository methods scoped by organization_id in app/repositories/assets.py
-- [ ] T018 [US1] Implement create, get, update, and delete service methods with normalization, RBAC checks, duplicate checks, and structured error mapping in app/services/tenant_assets.py
-- [ ] T019 [US1] Implement POST /assets, GET /assets/{asset_id}, PATCH /assets/{asset_id}, and DELETE /assets/{asset_id} route handlers with response models and summaries in app/api/routes/assets.py
-- [ ] T020 [US1] Ensure create and update payloads reject organization_id and other extra fields in app/schemas/assets.py
-- [ ] T021 [US1] Map database uniqueness races to structured HTTP 409 duplicate responses in app/services/tenant_assets.py
-- [ ] T022 [US1] Add concise docstrings to new and modified asset CRUD functions in app/api/routes/assets.py, app/services/tenant_assets.py, app/repositories/assets.py, and app/schemas/assets.py
+- [X] T016 [US1] Implement AssetCreate, AssetUpdate, AssetRead, and domain enum schemas with extra-field rejection in app/schemas/assets.py
+- [X] T017 [US1] Implement create, detail, update, and hard-delete repository methods scoped by organization_id in app/repositories/assets.py
+- [X] T018 [US1] Implement create, get, update, and delete service methods with normalization, RBAC checks, duplicate checks, and structured error mapping in app/services/tenant_assets.py
+- [X] T019 [US1] Implement POST /assets, GET /assets/{asset_id}, PATCH /assets/{asset_id}, and DELETE /assets/{asset_id} route handlers with response models and summaries in app/api/routes/assets.py
+- [X] T020 [US1] Ensure create and update payloads reject organization_id and other extra fields in app/schemas/assets.py
+- [X] T021 [US1] Map database uniqueness races to structured HTTP 409 duplicate responses in app/services/tenant_assets.py
+- [X] T022 [US1] Add concise docstrings to new and modified asset CRUD functions in app/api/routes/assets.py, app/services/tenant_assets.py, app/repositories/assets.py, and app/schemas/assets.py
 
 **Checkpoint**: User Story 1 is fully functional and testable independently.
 
@@ -80,19 +80,19 @@
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Add contract tests for GET /assets query parameters and paginated response metadata in tests/contract/test_assets_api.py
-- [ ] T024 [P] [US2] Add integration tests for type, status, tag, source, and value_contains filters in tests/integration/test_asset_filters.py
-- [ ] T025 [P] [US2] Add integration tests for all supported sort fields and asc/desc order in tests/integration/test_asset_filters.py
-- [ ] T026 [P] [US2] Add integration tests for default pagination, max page_size 100, empty results, and page metadata in tests/integration/test_asset_filters.py
+- [X] T023 [P] [US2] Add contract tests for GET /assets query parameters and paginated response metadata in tests/contract/test_assets_api.py
+- [X] T024 [P] [US2] Add integration tests for type, status, tag, source, and value_contains filters in tests/integration/test_asset_filters.py
+- [X] T025 [P] [US2] Add integration tests for all supported sort fields and asc/desc order in tests/integration/test_asset_filters.py
+- [X] T026 [P] [US2] Add integration tests for default pagination, max page_size 100, empty results, and page metadata in tests/integration/test_asset_filters.py
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Implement AssetListParams and PaginatedAssets schemas with filter, sort, and pagination validation in app/schemas/assets.py
-- [ ] T028 [US2] Implement organization-scoped filtered count and paginated list queries in app/repositories/assets.py
-- [ ] T029 [US2] Implement list service method with normalized value_contains handling and page metadata calculation in app/services/tenant_assets.py
-- [ ] T030 [US2] Implement GET /assets route handler with query validation, response model, and OpenAPI summary in app/api/routes/assets.py
-- [ ] T031 [US2] Ensure tag containment, source matching, and value_contains filters never remove organization scoping in app/repositories/assets.py
-- [ ] T032 [US2] Add concise docstrings to new and modified list/filter/sort/pagination functions in app/api/routes/assets.py, app/services/tenant_assets.py, app/repositories/assets.py, and app/schemas/assets.py
+- [X] T027 [US2] Implement AssetListParams and PaginatedAssets schemas with filter, sort, and pagination validation in app/schemas/assets.py
+- [X] T028 [US2] Implement organization-scoped filtered count and paginated list queries in app/repositories/assets.py
+- [X] T029 [US2] Implement list service method with normalized value_contains handling and page metadata calculation in app/services/tenant_assets.py
+- [X] T030 [US2] Implement GET /assets route handler with query validation, response model, and OpenAPI summary in app/api/routes/assets.py
+- [X] T031 [US2] Ensure tag containment, source matching, and value_contains filters never remove organization scoping in app/repositories/assets.py
+- [X] T032 [US2] Add concise docstrings to new and modified list/filter/sort/pagination functions in app/api/routes/assets.py, app/services/tenant_assets.py, app/repositories/assets.py, and app/schemas/assets.py
 
 **Checkpoint**: User Stories 1 and 2 both work independently.
 
@@ -106,17 +106,17 @@
 
 ### Tests for User Story 3
 
-- [ ] T033 [P] [US3] Add integration tests for same type/value assets existing independently in two organizations in tests/integration/test_asset_tenant_isolation.py
-- [ ] T034 [P] [US3] Add integration tests that cross-organization detail, update, and delete return ASSET_NOT_FOUND in tests/integration/test_asset_tenant_isolation.py
-- [ ] T035 [P] [US3] Add integration tests that client-supplied organization_id in create and update is rejected in tests/integration/test_asset_tenant_isolation.py
-- [ ] T036 [P] [US3] Add list isolation tests for filters and value_contains across organizations in tests/integration/test_asset_tenant_isolation.py
+- [X] T033 [P] [US3] Add integration tests for same type/value assets existing independently in two organizations in tests/integration/test_asset_tenant_isolation.py
+- [X] T034 [P] [US3] Add integration tests that cross-organization detail, update, and delete return ASSET_NOT_FOUND in tests/integration/test_asset_tenant_isolation.py
+- [X] T035 [P] [US3] Add integration tests that client-supplied organization_id in create and update is rejected in tests/integration/test_asset_tenant_isolation.py
+- [X] T036 [P] [US3] Add list isolation tests for filters and value_contains across organizations in tests/integration/test_asset_tenant_isolation.py
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Audit every asset repository query to require organization_id predicates in app/repositories/assets.py
-- [ ] T038 [US3] Audit every asset service method to derive organization_id only from the authenticated user context in app/services/tenant_assets.py
-- [ ] T039 [US3] Ensure cross-organization detail, update, and delete paths raise the same ASSET_NOT_FOUND error as missing assets in app/services/tenant_assets.py
-- [ ] T040 [US3] Ensure route signatures do not accept organization ownership from path, query, or body parameters in app/api/routes/assets.py and app/schemas/assets.py
+- [X] T037 [US3] Audit every asset repository query to require organization_id predicates in app/repositories/assets.py
+- [X] T038 [US3] Audit every asset service method to derive organization_id only from the authenticated user context in app/services/tenant_assets.py
+- [X] T039 [US3] Ensure cross-organization detail, update, and delete paths raise the same ASSET_NOT_FOUND error as missing assets in app/services/tenant_assets.py
+- [X] T040 [US3] Ensure route signatures do not accept organization ownership from path, query, or body parameters in app/api/routes/assets.py and app/schemas/assets.py
 
 **Checkpoint**: All P1 user stories are independently functional and tenant scoped.
 
@@ -130,18 +130,18 @@
 
 ### Tests for User Story 4
 
-- [ ] T041 [P] [US4] Add validation tests for unsupported asset type, unsupported status, blank values, empty update bodies, and extra fields in tests/contract/test_assets_api.py
-- [ ] T042 [P] [US4] Add validation tests for unsupported sort fields, unsupported sort orders, page < 1, page_size < 1, and page_size > 100 in tests/integration/test_asset_filters.py
-- [ ] T043 [P] [US4] Add structured error tests for ASSET_NOT_FOUND, authorization_failed, DUPLICATE_ASSET, and unauthenticated access in tests/integration/test_asset_crud.py and tests/integration/test_asset_rbac.py
-- [ ] T044 [P] [US4] Add OpenAPI schema tests for Assets tags, route summaries, request models, response models, and documented errors in tests/contract/test_assets_api.py
+- [X] T041 [P] [US4] Add validation tests for unsupported asset type, unsupported status, blank values, empty update bodies, and extra fields in tests/contract/test_assets_api.py
+- [X] T042 [P] [US4] Add validation tests for unsupported sort fields, unsupported sort orders, page < 1, page_size < 1, and page_size > 100 in tests/integration/test_asset_filters.py
+- [X] T043 [P] [US4] Add structured error tests for ASSET_NOT_FOUND, authorization_failed, DUPLICATE_ASSET, and unauthenticated access in tests/integration/test_asset_crud.py and tests/integration/test_asset_rbac.py
+- [X] T044 [P] [US4] Add OpenAPI schema tests for Assets tags, route summaries, request models, response models, and documented errors in tests/contract/test_assets_api.py
 
 ### Implementation for User Story 4
 
-- [ ] T045 [US4] Harden Pydantic validators for asset payloads, filters, sorting, and pagination in app/schemas/assets.py
-- [ ] T046 [US4] Add structured response documentation and error examples to all asset route decorators in app/api/routes/assets.py
-- [ ] T047 [US4] Ensure AppError handling returns `{ "error": { "code": "...", "message": "...", "details": {} } }` for asset domain failures in app/core/errors.py
-- [ ] T048 [US4] Ensure duplicate creates and duplicate updates return HTTP 409 with DUPLICATE_ASSET in app/services/tenant_assets.py
-- [ ] T049 [US4] Ensure forbidden asset actions use the stable authorization_failed code through app/services/rbac.py and app/services/tenant_assets.py
+- [X] T045 [US4] Harden Pydantic validators for asset payloads, filters, sorting, and pagination in app/schemas/assets.py
+- [X] T046 [US4] Add structured response documentation and error examples to all asset route decorators in app/api/routes/assets.py
+- [X] T047 [US4] Ensure AppError handling returns `{ "error": { "code": "...", "message": "...", "details": {} } }` for asset domain failures in app/core/errors.py
+- [X] T048 [US4] Ensure duplicate creates and duplicate updates return HTTP 409 with DUPLICATE_ASSET in app/services/tenant_assets.py
+- [X] T049 [US4] Ensure forbidden asset actions use the stable authorization_failed code through app/services/rbac.py and app/services/tenant_assets.py
 
 **Checkpoint**: All user stories are independently functional with documented validation and error behavior.
 
@@ -151,16 +151,16 @@
 
 **Purpose**: Documentation, verification, and cleanup across Phase 3.
 
-- [ ] T050 [P] Update README.md with Phase 3 asset authentication, create, list, filter, update, delete, and test commands
-- [ ] T051 [P] Confirm `.env.example` needs no new Phase 3 settings or document any new required runtime key in .env.example
-- [ ] T052 [P] Add or update concise docstrings for all modified Python functions, class methods, services, and repositories in app/
-- [ ] T053 Run quickstart validation steps from specs/003-asset-crud/quickstart.md
-- [ ] T054 Run `uv run pytest tests/unit/test_asset_normalization.py`
-- [ ] T055 Run `uv run pytest tests/contract/test_assets_api.py`
-- [ ] T056 Run `uv run pytest tests/integration/test_asset_crud.py tests/integration/test_asset_filters.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py`
-- [ ] T057 Run `uv run pytest`
-- [ ] T058 Run `uv run ruff check .`
-- [ ] T059 Run `uv run mypy app`
+- [X] T050 [P] Update README.md with Phase 3 asset authentication, create, list, filter, update, delete, and test commands
+- [X] T051 [P] Confirm `.env.example` needs no new Phase 3 settings or document any new required runtime key in .env.example
+- [X] T052 [P] Add or update concise docstrings for all modified Python functions, class methods, services, and repositories in app/
+- [X] T053 Run quickstart validation steps from specs/003-asset-crud/quickstart.md
+- [X] T054 Run `uv run pytest tests/unit/test_asset_normalization.py`
+- [X] T055 Run `uv run pytest tests/contract/test_assets_api.py`
+- [X] T056 Run `uv run pytest tests/integration/test_asset_crud.py tests/integration/test_asset_filters.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py`
+- [X] T057 Run `uv run pytest`
+- [X] T058 Run `uv run ruff check .`
+- [X] T059 Run `uv run mypy app`
 
 ---
 

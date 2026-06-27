@@ -18,7 +18,7 @@ def test_access_token_contains_required_auth_context() -> None:
         organization_id,
         "admin",
         settings=settings,
-        now=datetime(2026, 6, 27, tzinfo=UTC),
+        now=datetime.now(UTC),
     )
     payload = decode_access_token(token, settings=settings)
 

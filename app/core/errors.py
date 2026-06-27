@@ -8,6 +8,8 @@ class ConfigurationError(RuntimeError):
 
 
 class AppError(HTTPException):
+    """Base HTTP error that carries the project's structured error envelope."""
+
     def __init__(
         self,
         status_code: int,
@@ -28,6 +30,8 @@ class AppError(HTTPException):
 
 
 class AuthenticationError(AppError):
+    """Raised when access credentials are missing or invalid."""
+
     def __init__(self) -> None:
         super().__init__(
             status.HTTP_401_UNAUTHORIZED,
@@ -37,6 +41,8 @@ class AuthenticationError(AppError):
 
 
 class AuthorizationError(AppError):
+    """Raised when a role lacks permission for an action."""
+
     def __init__(self, action: str | None = None) -> None:
         super().__init__(
             status.HTTP_403_FORBIDDEN,
@@ -47,6 +53,8 @@ class AuthorizationError(AppError):
 
 
 class DuplicateResourceError(AppError):
+    """Raised when a generic unique resource constraint is violated."""
+
     def __init__(self, resource: str) -> None:
         super().__init__(
             status.HTTP_409_CONFLICT,
@@ -56,10 +64,34 @@ class DuplicateResourceError(AppError):
 
 
 class NotFoundError(AppError):
+    """Raised when a generic resource lookup returns no row."""
+
     def __init__(self, resource: str) -> None:
         super().__init__(
             status.HTTP_404_NOT_FOUND,
             "not_found",
             f"{resource} was not found.",
+        )
+
+
+class AssetNotFoundError(AppError):
+    """Raised when an asset is missing or outside the user's organization."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_404_NOT_FOUND,
+            "ASSET_NOT_FOUND",
+            "Asset was not found.",
+        )
+
+
+class DuplicateAssetError(AppError):
+    """Raised when an asset type and value already exist in the organization."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_409_CONFLICT,
+            "DUPLICATE_ASSET",
+            "Asset already exists.",
         )
 

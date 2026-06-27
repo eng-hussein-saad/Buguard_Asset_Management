@@ -1,0 +1,166 @@
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from app.api.deps import get_current_user, get_db
+from app.models.asset import AssetStatus, AssetType
+from app.schemas.assets import AssetRead, PaginatedAssets
+from app.services import tenant_assets
+from httpx import ASGITransport, AsyncClient
+
+
+class DummySession:
+    """Minimal async session used when route tests patch service behavior."""
+
+    async def commit(self) -> None:
+        """Pretend to commit a transaction."""
+
+
+async def _client(app_instance, user):
+    """Create an ASGI client with auth and database dependencies overridden."""
+    app_instance.dependency_overrides[get_current_user] = lambda: user
+    app_instance.dependency_overrides[get_db] = lambda: DummySession()
+    return AsyncClient(
+        transport=ASGITransport(app=app_instance), base_url="http://testserver"
+    )
+
+
+def test_assets_openapi_contract_is_exposed(app_instance) -> None:
+    generated = app_instance.openapi()
+    contract = Path("specs/003-asset-crud/contracts/assets-api.yaml").read_text()
+
+    for path in ("/assets", "/assets/{asset_id}"):
+        assert path in generated["paths"]
+        assert path in contract
+
+    assets_path = generated["paths"]["/assets"]
+    asset_detail_path = generated["paths"]["/assets/{asset_id}"]
+    assert assets_path["post"]["tags"] == ["Assets"]
+    assert assets_path["post"]["summary"] == "Create an organization-owned asset"
+    assert assets_path["get"]["summary"] == "List organization-owned assets"
+    assert asset_detail_path["get"]["summary"] == "Get one organization-owned asset"
+    assert (
+        asset_detail_path["patch"]["summary"]
+        == "Update one organization-owned asset"
+    )
+    assert (
+        asset_detail_path["delete"]["summary"]
+        == "Hard delete one organization-owned asset"
+    )
+
+
+@pytest.mark.asyncio
+async def test_asset_crud_route_response_shapes(
+    app_instance, demo_user, asset_factory, monkeypatch
+) -> None:
+    asset = asset_factory(demo_user.organization_id)
+    response_body = AssetRead.from_model(asset)
+
+    async def fake_create(session, current_user, payload):
+        assert payload.value == " Example.COM "
+        return response_body
+
+    async def fake_read(session, current_user, asset_id):
+        assert asset_id == asset.id
+        return response_body
+
+    async def fake_update(session, current_user, asset_id, payload):
+        assert payload.status == AssetStatus.STALE
+        return response_body.model_copy(update={"status": AssetStatus.STALE})
+
+    async def fake_delete(session, current_user, asset_id):
+        assert asset_id == asset.id
+
+    monkeypatch.setattr(tenant_assets, "create_asset", fake_create)
+    monkeypatch.setattr(tenant_assets, "read_asset", fake_read)
+    monkeypatch.setattr(tenant_assets, "update_asset", fake_update)
+    monkeypatch.setattr(tenant_assets, "delete_asset", fake_delete)
+
+    async with await _client(app_instance, demo_user) as client:
+        create = await client.post(
+            "/assets", json={"type": "domain", "value": " Example.COM "}
+        )
+        detail = await client.get(f"/assets/{asset.id}")
+        update = await client.patch(f"/assets/{asset.id}", json={"status": "stale"})
+        delete = await client.delete(f"/assets/{asset.id}")
+
+    assert create.status_code == 201
+    assert create.json()["value"] == "example.com"
+    assert detail.status_code == 200
+    assert update.status_code == 200
+    assert update.json()["status"] == "stale"
+    assert delete.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_asset_list_query_parameters_and_pagination_metadata(
+    app_instance, demo_user, asset_factory, monkeypatch
+) -> None:
+    asset = asset_factory(demo_user.organization_id, tags=["external"])
+
+    async def fake_list(session, current_user, params):
+        assert params.type == AssetType.DOMAIN
+        assert params.status == AssetStatus.ACTIVE
+        assert params.tag == "external"
+        assert params.source == "manual"
+        assert params.value_contains == "example"
+        assert params.sort_by == "value"
+        assert params.sort_order == "asc"
+        assert params.page == 1
+        assert params.page_size == 20
+        return PaginatedAssets(
+            items=[AssetRead.from_model(asset)],
+            page=1,
+            page_size=20,
+            total=1,
+            total_pages=1,
+            has_next=False,
+            has_previous=False,
+        )
+
+    monkeypatch.setattr(tenant_assets, "list_assets", fake_list)
+
+    async with await _client(app_instance, demo_user) as client:
+        response = await client.get(
+            "/assets?type=domain&status=active&tag=external&source=manual"
+            "&value_contains=example&sort_by=value&sort_order=asc"
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == str(asset.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "unsupported", "value": "example.com"},
+        {"type": "domain", "value": "   "},
+        {"type": "domain", "value": "example.com", "organization_id": str(uuid4())},
+    ],
+)
+async def test_asset_create_validation_rejects_invalid_payloads(
+    app_instance, demo_user, payload
+) -> None:
+    async with await _client(app_instance, demo_user) as client:
+        response = await client.post("/assets", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    ["sort_by=bad", "sort_order=sideways", "page=0", "page_size=0", "page_size=101"],
+)
+async def test_asset_list_validation_rejects_invalid_query(
+    app_instance, demo_user, query
+) -> None:
+    async with await _client(app_instance, demo_user) as client:
+        response = await client.get(f"/assets?{query}")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "validation_error"
