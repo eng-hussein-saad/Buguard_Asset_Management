@@ -32,4 +32,4 @@
 ## Notes
 
 - Validation passed after initial review. The specification is scoped to Phase 3 only and treats Phase 1 and Phase 2 behavior as dependencies.
-- Delete behavior is intentionally left as "delete or archive" because `PLAN.md` permits admin delete/archive at this phase; the future plan may choose the concrete behavior while preserving the specified user outcome and tests.
+- Delete behavior was clarified on 2026-06-27: Phase 3 uses hard delete for `DELETE /assets/{asset_id}`.
