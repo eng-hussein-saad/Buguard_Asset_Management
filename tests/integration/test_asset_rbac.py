@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 from app.core.errors import AuthorizationError
-from app.schemas.assets import AssetCreate, AssetUpdate
+from app.schemas.assets import AssetCreate, AssetImportBatch, AssetUpdate
 from app.services import tenant_assets
 
 
@@ -24,6 +24,13 @@ async def test_viewer_mutations_are_denied(viewer_user) -> None:
 
     with pytest.raises(AuthorizationError):
         await tenant_assets.delete_asset(DummySession(), viewer_user, uuid4())
+
+    with pytest.raises(AuthorizationError):
+        await tenant_assets.import_assets(
+            DummySession(),
+            viewer_user,
+            AssetImportBatch(items=[{"type": "domain", "value": "example.com"}]),
+        )
 
 
 @pytest.mark.asyncio

@@ -1,15 +1,20 @@
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AssetNotFoundError, DuplicateAssetError, NotFoundError
-from app.models.asset import Asset, AssetRelationship
+from app.models.asset import Asset, AssetRelationship, AssetStatus, AssetType
 from app.models.user import User
 from app.repositories import assets as asset_repository
 from app.repositories import relationships as relationship_repository
 from app.schemas.assets import (
     AssetCreate,
+    AssetImportBatch,
+    AssetImportError,
+    AssetImportSummary,
     AssetListParams,
     AssetRead,
     AssetUpdate,
@@ -24,6 +29,122 @@ def normalize_asset_value(asset_type: str, value: str) -> str:
     if asset_type in {"domain", "subdomain"}:
         return normalized.lower()
     return normalized
+
+
+def merge_import_tags(
+    existing: list[str] | None, incoming: list[str] | None
+) -> list[str]:
+    """Merge tags in stable order while dropping duplicate values."""
+    merged: list[str] = []
+    for tag in [*(existing or []), *(incoming or [])]:
+        if tag not in merged:
+            merged.append(tag)
+    return merged
+
+
+def merge_import_metadata(
+    existing: dict[str, Any] | None, incoming: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Shallow-merge metadata with newest import keys winning conflicts."""
+    return {**(existing or {}), **(incoming or {})}
+
+
+def resolve_import_status(
+    existing_status: str | None, explicit_status: str | None
+) -> str:
+    """Choose the lifecycle status for new imports and accepted re-sightings."""
+    if existing_status is None:
+        return explicit_status or AssetStatus.ACTIVE.value
+    if existing_status == AssetStatus.STALE.value:
+        return AssetStatus.ACTIVE.value
+    if existing_status == AssetStatus.ARCHIVED.value:
+        return (
+            AssetStatus.ACTIVE.value
+            if explicit_status == AssetStatus.ACTIVE.value
+            else AssetStatus.ARCHIVED.value
+        )
+    return explicit_status or existing_status
+
+
+def import_status_code(summary: AssetImportSummary) -> int:
+    """Map import summary counts to the required HTTP response status."""
+    accepted = summary.created + summary.updated
+    if accepted and summary.failed:
+        return 207
+    if not accepted and summary.failed:
+        return 422
+    return 200
+
+
+def _reject_record(index: int, reason: str) -> AssetImportError:
+    """Build a stable per-record validation error."""
+    return AssetImportError(index=index, reason=reason)
+
+
+def validate_import_record(
+    index: int, raw: dict[str, Any]
+) -> tuple[dict[str, Any] | None, AssetImportError | None]:
+    """Validate one raw import record without trusting ownership or timestamps."""
+    allowed_fields = {
+        "type",
+        "value",
+        "status",
+        "source",
+        "tags",
+        "metadata",
+        "first_seen",
+        "last_seen",
+    }
+    ignored_fields = {"first_seen", "last_seen"}
+    extra_fields = set(raw) - allowed_fields
+    if "organization_id" in raw:
+        return None, _reject_record(index, "organization_id is not accepted.")
+    if extra_fields:
+        return None, _reject_record(
+            index, f"Unsupported import field: {sorted(extra_fields)[0]}."
+        )
+    for field_name in ignored_fields:
+        raw.pop(field_name, None)
+
+    try:
+        asset_type = AssetType(str(raw.get("type"))).value
+    except ValueError:
+        return None, _reject_record(index, "Unsupported asset type.")
+
+    value = raw.get("value")
+    if not isinstance(value, str) or not value.strip():
+        return None, _reject_record(index, "Asset value must not be blank.")
+
+    status_value: str | None = None
+    if raw.get("status") is not None:
+        try:
+            status_value = AssetStatus(str(raw["status"])).value
+        except ValueError:
+            return None, _reject_record(index, "Unsupported asset status.")
+
+    source = raw.get("source")
+    if source is not None and not isinstance(source, str):
+        return None, _reject_record(index, "Asset source must be a string or null.")
+
+    tags = raw.get("tags", [])
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        return None, _reject_record(index, "Asset tags must be a list of strings.")
+
+    metadata = raw.get("metadata", {})
+    if not isinstance(metadata, dict):
+        return None, _reject_record(index, "Asset metadata must be an object.")
+
+    return (
+        {
+            "type": asset_type,
+            "value": normalize_asset_value(asset_type, value),
+            "status": status_value,
+            "source": source,
+            "tags": tags,
+            "metadata": metadata,
+        },
+        None,
+    )
 
 
 def _normalized_update(existing: Asset, payload: AssetUpdate) -> dict[str, object]:
@@ -129,6 +250,69 @@ async def update_asset(
         await session.rollback()
         raise DuplicateAssetError() from exc
     return AssetRead.from_model(updated)
+
+
+async def import_assets(
+    session: AsyncSession, current_user: User, payload: AssetImportBatch
+) -> AssetImportSummary:
+    """Import observations idempotently under the authenticated organization."""
+    require_permission(current_user.role, Permission.BULK_IMPORT)
+    summary = AssetImportSummary(created=0, updated=0, failed=0, errors=[])
+
+    try:
+        for index, raw_record in enumerate(payload.items):
+            record, error = validate_import_record(index, dict(raw_record))
+            if error is not None or record is None:
+                summary.failed += 1
+                summary.errors.append(error or _reject_record(index, "Invalid record."))
+                continue
+
+            observed_at = datetime.now(UTC)
+            existing = await asset_repository.get_by_org_type_value(
+                session,
+                current_user.organization_id,
+                str(record["type"]),
+                str(record["value"]),
+            )
+            if existing is None:
+                await asset_repository.create_asset(
+                    session,
+                    current_user.organization_id,
+                    str(record["type"]),
+                    str(record["value"]),
+                    resolve_import_status(None, record["status"]),
+                    observed_at,
+                    observed_at,
+                    record["source"],
+                    merge_import_tags([], record["tags"]),
+                    dict(record["metadata"]),
+                )
+                summary.created += 1
+                continue
+
+            await asset_repository.update_imported_asset(
+                session,
+                existing,
+                status=resolve_import_status(existing.status, record["status"]),
+                last_seen=observed_at,
+                source=(
+                    record["source"]
+                    if record["source"] is not None
+                    else existing.source
+                ),
+                tags=merge_import_tags(existing.tags, record["tags"]),
+                metadata=merge_import_metadata(
+                    existing.asset_metadata, record["metadata"]
+                ),
+            )
+            summary.updated += 1
+        if summary.created or summary.updated:
+            await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise DuplicateAssetError() from exc
+
+    return summary
 
 
 async def delete_asset(

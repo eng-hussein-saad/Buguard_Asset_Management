@@ -105,8 +105,43 @@ def build_asset(
     )
 
 
+def import_payload(value: str = "Example.COM", **overrides):
+    """Build a one-record Phase 4 import payload for route and service tests."""
+    record = {
+        "type": "domain",
+        "value": value,
+        "source": "phase4-test",
+        "tags": ["external"],
+        "metadata": {"owner": "security"},
+    }
+    record.update(overrides)
+    return {"items": [record]}
+
+
+def assert_import_summary(
+    body: dict, *, created: int, updated: int, failed: int
+) -> None:
+    """Assert stable import summary fields without depending on error text."""
+    assert body["created"] == created
+    assert body["updated"] == updated
+    assert body["failed"] == failed
+    assert "errors" in body
+
+
 @pytest.fixture
 def asset_factory():
     """Return a small factory for tenant-scoped asset model instances."""
     return build_asset
+
+
+@pytest.fixture
+def import_payload_factory():
+    """Return a factory for Phase 4 import request payloads."""
+    return import_payload
+
+
+@pytest.fixture
+def import_summary_assertion():
+    """Return the shared import summary assertion helper."""
+    return assert_import_summary
 

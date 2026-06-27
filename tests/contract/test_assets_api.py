@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from app.api.deps import get_current_user, get_db
 from app.models.asset import AssetStatus, AssetType
-from app.schemas.assets import AssetRead, PaginatedAssets
+from app.schemas.assets import AssetImportSummary, AssetRead, PaginatedAssets
 from app.services import tenant_assets
 from httpx import ASGITransport, AsyncClient
 
@@ -32,16 +32,21 @@ def test_assets_openapi_contract_is_exposed(app_instance) -> None:
     for path in ("/assets", "/assets/{asset_id}"):
         assert path in generated["paths"]
         assert path in contract
+    assert "/assets/import" in generated["paths"]
 
     assets_path = generated["paths"]["/assets"]
     asset_detail_path = generated["paths"]["/assets/{asset_id}"]
     assert assets_path["post"]["tags"] == ["Assets"]
     assert assets_path["post"]["summary"] == "Create an organization-owned asset"
+    assert (
+        generated["paths"]["/assets/import"]["post"]["summary"]
+        == "Import organization-owned asset observations"
+    )
     assert assets_path["get"]["summary"] == "List organization-owned assets"
     assert asset_detail_path["get"]["summary"] == "Get one organization-owned asset"
     assert (
         asset_detail_path["patch"]["summary"]
-        == "Update one organization-owned asset"
+        == "Update one organization-owned asset, including marking stale"
     )
     assert (
         asset_detail_path["delete"]["summary"]
@@ -149,6 +154,68 @@ async def test_asset_create_validation_rejects_invalid_payloads(
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.asyncio
+async def test_asset_import_route_success_and_multistatus_shapes(
+    app_instance,
+    demo_user,
+    import_payload_factory,
+    import_summary_assertion,
+    monkeypatch,
+) -> None:
+    async def fake_import(session, current_user, payload):
+        assert payload.items[0]["value"] == "Example.COM"
+        return AssetImportSummary(created=1, updated=0, failed=0, errors=[])
+
+    monkeypatch.setattr(tenant_assets, "import_assets", fake_import)
+
+    async with await _client(app_instance, demo_user) as client:
+        response = await client.post("/assets/import", json=import_payload_factory())
+
+    assert response.status_code == 200
+    import_summary_assertion(response.json(), created=1, updated=0, failed=0)
+
+    async def fake_partial(session, current_user, payload):
+        return AssetImportSummary(
+            created=1,
+            updated=0,
+            failed=1,
+            errors=[{"index": 1, "reason": "Asset value must not be blank."}],
+        )
+
+    monkeypatch.setattr(tenant_assets, "import_assets", fake_partial)
+
+    async with await _client(app_instance, demo_user) as client:
+        partial = await client.post("/assets/import", json=import_payload_factory())
+
+    assert partial.status_code == 207
+    import_summary_assertion(partial.json(), created=1, updated=0, failed=1)
+
+
+@pytest.mark.asyncio
+async def test_asset_import_route_all_record_failure_shape(
+    app_instance,
+    demo_user,
+    import_payload_factory,
+    import_summary_assertion,
+    monkeypatch,
+) -> None:
+    async def fake_failure(session, current_user, payload):
+        return AssetImportSummary(
+            created=0,
+            updated=0,
+            failed=1,
+            errors=[{"index": 0, "reason": "Unsupported asset type."}],
+        )
+
+    monkeypatch.setattr(tenant_assets, "import_assets", fake_failure)
+
+    async with await _client(app_instance, demo_user) as client:
+        response = await client.post("/assets/import", json=import_payload_factory())
+
+    assert response.status_code == 422
+    import_summary_assertion(response.json(), created=0, updated=0, failed=1)
 
 
 @pytest.mark.asyncio

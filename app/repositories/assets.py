@@ -51,6 +51,18 @@ async def get_duplicate_for_organization(
     return cast(Asset | None, await session.scalar(query))
 
 
+async def get_by_org_type_value(
+    session: AsyncSession,
+    organization_id: UUID,
+    asset_type: str,
+    value: str,
+) -> Asset | None:
+    """Look up one asset by organization, type, and canonical import value."""
+    return await get_duplicate_for_organization(
+        session, organization_id, asset_type, value
+    )
+
+
 async def create_asset(
     session: AsyncSession,
     organization_id: UUID,
@@ -91,6 +103,26 @@ async def update_asset(
             asset.asset_metadata = value
         else:
             setattr(asset, field_name, value)
+    await session.flush()
+    return asset
+
+
+async def update_imported_asset(
+    session: AsyncSession,
+    asset: Asset,
+    *,
+    status: str,
+    last_seen: Any,
+    source: str | None,
+    tags: list[str],
+    metadata: dict[str, Any],
+) -> Asset:
+    """Apply import-safe lifecycle and observation fields to an existing asset."""
+    asset.status = status
+    asset.last_seen = last_seen
+    asset.source = source
+    asset.tags = tags
+    asset.asset_metadata = metadata
     await session.flush()
     return asset
 

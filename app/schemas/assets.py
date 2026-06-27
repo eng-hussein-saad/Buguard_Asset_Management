@@ -59,6 +59,49 @@ class AssetUpdate(AssetBase):
         return self
 
 
+class AssetImportRecord(BaseModel):
+    """Documents one asset observation accepted by the import service."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: AssetType
+    value: str = Field(min_length=1)
+    status: AssetStatus = AssetStatus.ACTIVE
+    source: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+    first_seen: datetime | None = Field(
+        default=None, description="Ignored; assigned by the server."
+    )
+    last_seen: datetime | None = Field(
+        default=None, description="Ignored; assigned by the server."
+    )
+
+
+class AssetImportBatch(BaseModel):
+    """Accepts a well-formed collection for record-level import validation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[dict[str, Any]] = Field(min_length=1)
+
+
+class AssetImportError(BaseModel):
+    """Serializes a stable per-record import failure."""
+
+    index: int = Field(ge=0)
+    reason: str = Field(min_length=1)
+
+
+class AssetImportSummary(BaseModel):
+    """Serializes created, updated, and failed counts for a bulk import."""
+
+    created: int = Field(ge=0)
+    updated: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    errors: list[AssetImportError] = Field(default_factory=list)
+
+
 class AssetRead(BaseModel):
     """Serializes an asset without exposing tenant ownership."""
 

@@ -2,7 +2,12 @@ from uuid import uuid4
 
 import pytest
 from app.core.errors import AssetNotFoundError
-from app.schemas.assets import AssetCreate, AssetListParams, AssetUpdate
+from app.schemas.assets import (
+    AssetCreate,
+    AssetImportBatch,
+    AssetListParams,
+    AssetUpdate,
+)
 from app.services import tenant_assets
 
 
@@ -104,3 +109,70 @@ async def test_list_is_scoped_to_authenticated_organization(
 
     assert captured["organization_id"] == demo_user.organization_id
     assert result.items == []
+
+
+@pytest.mark.asyncio
+async def test_import_same_type_and_value_is_scoped_to_each_organization(
+    demo_user, asset_factory, monkeypatch
+) -> None:
+    other_user = type(demo_user)(
+        id=uuid4(),
+        organization_id=uuid4(),
+        email="other@example.com",
+        password_hash="hash",
+        role="admin",
+        is_active=True,
+    )
+    store = {}
+
+    async def fake_get(session, organization_id, asset_type, value):
+        return store.get((organization_id, asset_type, value))
+
+    async def fake_create(
+        session,
+        organization_id,
+        asset_type,
+        value,
+        status="active",
+        first_seen=None,
+        last_seen=None,
+        source=None,
+        tags=None,
+        metadata=None,
+    ):
+        asset = asset_factory(organization_id, asset_type=asset_type, value=value)
+        store[(organization_id, asset_type, value)] = asset
+        return asset
+
+    monkeypatch.setattr(
+        tenant_assets.asset_repository, "get_by_org_type_value", fake_get
+    )
+    monkeypatch.setattr(tenant_assets.asset_repository, "create_asset", fake_create)
+
+    payload = AssetImportBatch(items=[{"type": "domain", "value": "Example.COM"}])
+    await tenant_assets.import_assets(DummySession(), demo_user, payload)
+    await tenant_assets.import_assets(DummySession(), other_user, payload)
+
+    assert (demo_user.organization_id, "domain", "example.com") in store
+    assert (other_user.organization_id, "domain", "example.com") in store
+    assert len(store) == 2
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_client_ownership_without_leaking_tenant_data(
+    demo_user, import_summary_assertion
+) -> None:
+    payload = AssetImportBatch(
+        items=[
+            {
+                "type": "domain",
+                "value": "example.com",
+                "organization_id": str(uuid4()),
+            }
+        ]
+    )
+
+    summary = await tenant_assets.import_assets(DummySession(), demo_user, payload)
+
+    import_summary_assertion(summary.model_dump(), created=0, updated=0, failed=1)
+    assert tenant_assets.import_status_code(summary) == 422

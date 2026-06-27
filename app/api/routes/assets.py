@@ -9,6 +9,8 @@ from app.models.asset import AssetStatus, AssetType
 from app.models.user import User
 from app.schemas.assets import (
     AssetCreate,
+    AssetImportBatch,
+    AssetImportSummary,
     AssetListParams,
     AssetRead,
     AssetSortField,
@@ -92,6 +94,38 @@ async def list_assets(
     return await tenant_assets.list_assets(session, current_user, params)
 
 
+@router.post(
+    "/import",
+    response_model=AssetImportSummary,
+    summary="Import organization-owned asset observations",
+    responses={
+        **{
+            code: response
+            for code, response in ERROR_RESPONSES.items()
+            if code in {400, 401, 403}
+        },
+        207: {
+            "model": AssetImportSummary,
+            "description": "At least one record was accepted and at least one failed.",
+        },
+        422: {
+            "model": AssetImportSummary,
+            "description": "Well-formed batch had no accepted records.",
+        },
+    },
+)
+async def import_assets(
+    payload: AssetImportBatch,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetImportSummary:
+    """Import assets idempotently and return a stable lifecycle summary."""
+    summary = await tenant_assets.import_assets(session, current_user, payload)
+    response.status_code = tenant_assets.import_status_code(summary)
+    return summary
+
+
 @router.get(
     "/{asset_id}",
     response_model=AssetRead,
@@ -114,7 +148,7 @@ async def get_asset(
 @router.patch(
     "/{asset_id}",
     response_model=AssetRead,
-    summary="Update one organization-owned asset",
+    summary="Update one organization-owned asset, including marking stale",
     responses=ERROR_RESPONSES,
 )
 async def update_asset(

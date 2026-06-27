@@ -1,15 +1,17 @@
 # Buguard Asset Management Backend
 
 The backend provides the FastAPI foundation for Buguard Asset Management,
-multi-tenant authentication, and Phase 3 tenant-scoped asset CRUD. It includes
+multi-tenant authentication, tenant-scoped asset CRUD, and Phase 4 bulk import
+lifecycle handling. It includes
 health checks, async PostgreSQL sessions, Alembic migrations, seeded evaluation
 tenants, login, refresh, logout, current-user auth, tenant ownership helpers,
 reusable RBAC checks, asset create/list/detail/update/delete endpoints, filters,
-sorting, pagination, normalization, and structured domain errors.
+sorting, pagination, normalization, idempotent asset import, partial import
+summaries, stale reactivation, and structured domain errors.
 
 Public registration, public organization creation, membership management,
-organization switching, bulk import, graph retrieval, caching, and AI analysis
-are out of scope for this phase.
+organization switching, graph retrieval, caching, and AI analysis are out of
+scope for this phase.
 
 ## Prerequisites
 
@@ -215,6 +217,39 @@ Duplicate assets in the same organization return HTTP 409 with
 `DUPLICATE_ASSET`. Missing or cross-organization asset identifiers return
 `ASSET_NOT_FOUND`.
 
+## Bulk Import and Lifecycle
+
+Analysts and admins can import observed assets for their own organization:
+
+```bash
+curl -i -X POST http://localhost:8000/assets/import \
+  -H "Authorization: Bearer <analyst_access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"type":"domain","value":"Example.COM","source":"sample-dataset","tags":["external","phase4"],"metadata":{"owner":"security"}},{"type":"subdomain","value":"API.Example.COM","tags":["api"]}]}'
+```
+
+Expected outcome: HTTP 200 with `created`, `updated`, `failed`, and `errors`.
+Re-running the same payload does not increase the organization asset count;
+the existing records are reported as `updated`. Asset ownership is always
+derived from the bearer token, and `organization_id` in import records is
+rejected as a per-record error.
+
+Mixed valid and invalid records return HTTP 207 with the same summary shape:
+
+```bash
+curl -i -X POST http://localhost:8000/assets/import \
+  -H "Authorization: Bearer <analyst_access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"type":"domain","value":"valid.example.com"},{"type":"domain","value":""},{"type":"unsupported","value":"bad.example.com"}]}'
+```
+
+If every record fails record-level validation, the route returns HTTP 422 and
+does not create or update assets. Import re-sightings preserve `first_seen`,
+refresh `last_seen` from server time, merge tags without duplicates, and
+shallow-merge metadata with newest values winning conflicts. Stale assets become
+active when imported again; archived assets stay archived unless the import
+record explicitly sets `"status":"active"`.
+
 ## Tenant Isolation and Roles
 
 Tenant-owned resources derive `organization_id` only from the authenticated
@@ -235,7 +270,7 @@ Role matrix:
 ```bash
 uv run pytest tests/unit/test_asset_normalization.py
 uv run pytest tests/contract/test_assets_api.py
-uv run pytest tests/integration/test_asset_crud.py tests/integration/test_asset_filters.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py
+uv run pytest tests/integration/test_asset_import_lifecycle.py tests/integration/test_asset_crud.py tests/integration/test_asset_filters.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py
 uv run pytest
 uv run ruff check .
 uv run mypy app
@@ -270,4 +305,12 @@ GET /assets
 GET /assets/{asset_id}
 PATCH /assets/{asset_id}
 DELETE /assets/{asset_id}
+```
+
+The Phase 4 bulk import contract lives at
+`specs/004-bulk-import-lifecycle/contracts/bulk-import-api.yaml` and adds:
+
+```text
+POST /assets/import
+PATCH /assets/{asset_id} with status=stale lifecycle examples
 ```
