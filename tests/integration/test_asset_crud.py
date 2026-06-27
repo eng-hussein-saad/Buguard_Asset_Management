@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 import pytest
-from app.core.errors import AssetNotFoundError, DuplicateAssetError
+from app.core.errors import AssetNotFoundError
 from app.schemas.assets import AssetCreate, AssetUpdate
 from app.services import tenant_assets
 
@@ -29,6 +29,9 @@ async def test_analyst_create_update_and_read(
     session = FakeSession()
     stored_asset = asset_factory(demo_user.organization_id, value="example.com")
 
+    async def no_existing_observation(*args):
+        return None
+
     async def no_duplicate(*args):
         return None
 
@@ -43,6 +46,9 @@ async def test_analyst_create_update_and_read(
         return asset
 
     monkeypatch.setattr(
+        tenant_assets.asset_repository, "get_by_org_type_value", no_existing_observation
+    )
+    monkeypatch.setattr(
         tenant_assets.asset_repository, "get_duplicate_for_organization", no_duplicate
     )
     monkeypatch.setattr(tenant_assets.asset_repository, "create_asset", fake_create)
@@ -51,7 +57,7 @@ async def test_analyst_create_update_and_read(
     )
     monkeypatch.setattr(tenant_assets.asset_repository, "update_asset", fake_update)
 
-    created = await tenant_assets.create_asset(
+    created, was_created = await tenant_assets.create_asset(
         session,
         demo_user,
         AssetCreate(type="domain", value=" Example.COM ", source="manual"),
@@ -62,6 +68,7 @@ async def test_analyst_create_update_and_read(
     )
 
     assert created.value == "example.com"
+    assert was_created is True
     assert read.id == stored_asset.id
     assert updated.status == "stale"
     assert session.committed
@@ -100,17 +107,51 @@ async def test_missing_asset_uses_asset_not_found(demo_user, monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
-async def test_duplicate_create_uses_structured_conflict(
+async def test_create_existing_asset_refreshes_observation(
     demo_user, asset_factory, monkeypatch
 ) -> None:
-    async def fake_duplicate(*args):
-        return asset_factory(demo_user.organization_id)
+    existing = asset_factory(
+        demo_user.organization_id,
+        value="example.com",
+        status="stale",
+        tags=["external"],
+        source="old-source",
+    )
+    existing.asset_metadata = {"owner": "security", "tier": "old"}
+    original_first_seen = existing.first_seen
+
+    async def fake_existing(*args):
+        return existing
+
+    async def fake_update(session, asset, *, status, last_seen, source, tags, metadata):
+        asset.status = status
+        asset.last_seen = last_seen
+        asset.source = source
+        asset.tags = tags
+        asset.asset_metadata = metadata
+        return asset
 
     monkeypatch.setattr(
-        tenant_assets.asset_repository, "get_duplicate_for_organization", fake_duplicate
+        tenant_assets.asset_repository, "get_by_org_type_value", fake_existing
+    )
+    monkeypatch.setattr(
+        tenant_assets.asset_repository, "update_imported_asset", fake_update
     )
 
-    with pytest.raises(DuplicateAssetError):
-        await tenant_assets.create_asset(
-            FakeSession(), demo_user, AssetCreate(type="domain", value="example.com")
-        )
+    refreshed, was_created = await tenant_assets.create_asset(
+        FakeSession(),
+        demo_user,
+        AssetCreate(
+            type="domain",
+            value=" Example.COM ",
+            tags=["external", "priority"],
+            metadata={"tier": "new", "env": "prod"},
+        ),
+    )
+
+    assert was_created is False
+    assert refreshed.status == "active"
+    assert existing.first_seen == original_first_seen
+    assert existing.last_seen > original_first_seen
+    assert refreshed.tags == ["external", "priority"]
+    assert refreshed.metadata == {"owner": "security", "tier": "new", "env": "prod"}

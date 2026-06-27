@@ -24,24 +24,36 @@ async def test_same_asset_value_can_exist_in_two_organizations(
 ) -> None:
     created = asset_factory(demo_user.organization_id, value="example.com")
 
-    async def fake_duplicate(*args):
+    async def fake_existing(*args):
         return None
 
-    async def fake_create(session, organization_id, asset_type, value, *args):
+    async def fake_create(
+        session,
+        organization_id,
+        asset_type,
+        value,
+        status="active",
+        first_seen=None,
+        last_seen=None,
+        source=None,
+        tags=None,
+        metadata=None,
+    ):
         assert organization_id == demo_user.organization_id
         assert value == "example.com"
         return created
 
     monkeypatch.setattr(
-        tenant_assets.asset_repository, "get_duplicate_for_organization", fake_duplicate
+        tenant_assets.asset_repository, "get_by_org_type_value", fake_existing
     )
     monkeypatch.setattr(tenant_assets.asset_repository, "create_asset", fake_create)
 
-    result = await tenant_assets.create_asset(
+    result, was_created = await tenant_assets.create_asset(
         DummySession(), demo_user, AssetCreate(type="domain", value="Example.COM")
     )
 
     assert result.value == "example.com"
+    assert was_created is True
 
 
 @pytest.mark.asyncio

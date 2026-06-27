@@ -37,7 +37,10 @@ def test_assets_openapi_contract_is_exposed(app_instance) -> None:
     assets_path = generated["paths"]["/assets"]
     asset_detail_path = generated["paths"]["/assets/{asset_id}"]
     assert assets_path["post"]["tags"] == ["Assets"]
-    assert assets_path["post"]["summary"] == "Create an organization-owned asset"
+    assert (
+        assets_path["post"]["summary"]
+        == "Create or refresh one organization-owned asset observation"
+    )
     assert (
         generated["paths"]["/assets/import"]["post"]["summary"]
         == "Import organization-owned asset observations"
@@ -63,7 +66,7 @@ async def test_asset_crud_route_response_shapes(
 
     async def fake_create(session, current_user, payload):
         assert payload.value == " Example.COM "
-        return response_body
+        return response_body, True
 
     async def fake_read(session, current_user, asset_id):
         assert asset_id == asset.id
@@ -95,6 +98,26 @@ async def test_asset_crud_route_response_shapes(
     assert update.status_code == 200
     assert update.json()["status"] == "stale"
     assert delete.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_asset_create_route_returns_ok_when_observation_is_refreshed(
+    app_instance, demo_user, asset_factory, monkeypatch
+) -> None:
+    asset = asset_factory(demo_user.organization_id)
+
+    async def fake_create(session, current_user, payload):
+        return AssetRead.from_model(asset), False
+
+    monkeypatch.setattr(tenant_assets, "create_asset", fake_create)
+
+    async with await _client(app_instance, demo_user) as client:
+        response = await client.post(
+            "/assets", json={"type": "domain", "value": "example.com"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(asset.id)
 
 
 @pytest.mark.asyncio

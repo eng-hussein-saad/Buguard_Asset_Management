@@ -8,7 +8,7 @@ info:
 paths:
   /assets:
     post:
-      summary: Create an organization-owned asset
+      summary: Create or refresh one organization-owned asset observation
       operationId: createAsset
       tags: [Assets]
       security:
@@ -22,6 +22,12 @@ paths:
       responses:
         '201':
           description: Asset created under the authenticated user's organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '200':
+          description: Existing asset observation refreshed without creating a duplicate.
           content:
             application/json:
               schema:
@@ -45,7 +51,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Duplicate asset in the authenticated organization.
+          description: Concurrent write conflict with another asset observation.
           content:
             application/json:
               schema:
@@ -308,9 +314,11 @@ components:
         first_seen:
           type: string
           format: date-time
+          description: Ignored when supplied; lifecycle timestamps are assigned by the server.
         last_seen:
           type: string
           format: date-time
+          description: Ignored when supplied; lifecycle timestamps are assigned by the server.
         source:
           type: [string, 'null']
         tags:

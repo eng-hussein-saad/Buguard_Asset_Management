@@ -172,10 +172,10 @@ curl -i -X POST http://localhost:8000/auth/logout \
 ## Assets
 
 Asset operations require a bearer access token. Viewers, analysts, and admins
-can list and read assets. Analysts and admins can create and update assets.
-Only admins can hard delete assets.
+can list and read assets. Analysts and admins can create, refresh, and update
+assets. Only admins can hard delete assets.
 
-Create an asset:
+Create or refresh a single asset observation:
 
 ```bash
 curl -s -X POST http://localhost:8000/assets \
@@ -184,9 +184,13 @@ curl -s -X POST http://localhost:8000/assets \
   -d '{"type":"domain","value":" Example.COM ","status":"active","source":"manual","tags":["external"],"metadata":{"owner":"security"}}'
 ```
 
-Expected outcome: HTTP 201 with `value` normalized to `example.com`. Asset
-ownership is derived from the authenticated user; `organization_id` in request
-bodies is rejected.
+Expected outcome: HTTP 201 when a new asset is created, or HTTP 200 when an
+existing organization asset with the same type and canonical value is refreshed.
+Asset ownership is derived from the authenticated user; `organization_id` in
+request bodies is rejected. Existing observations preserve `first_seen`, refresh
+`last_seen` from server time, merge tags without duplicates, shallow-merge
+metadata with newest values winning conflicts, and reactivate stale assets.
+Archived assets remain archived unless `status` is explicitly set to `active`.
 
 List, filter, sort, and paginate assets:
 
@@ -213,9 +217,8 @@ curl -i -X DELETE http://localhost:8000/assets/<asset_id> \
   -H "Authorization: Bearer <admin_access_token>"
 ```
 
-Duplicate assets in the same organization return HTTP 409 with
-`DUPLICATE_ASSET`. Missing or cross-organization asset identifiers return
-`ASSET_NOT_FOUND`.
+Concurrent write conflicts may return HTTP 409 with `DUPLICATE_ASSET`. Missing
+or cross-organization asset identifiers return `ASSET_NOT_FOUND`.
 
 ## Bulk Import and Lifecycle
 
@@ -276,7 +279,7 @@ uv run ruff check .
 uv run mypy app
 ```
 
-The focused asset commands cover Phase 3 behavior; the full pytest, Ruff, and
+The focused asset commands cover asset lifecycle behavior; the full pytest, Ruff, and
 mypy commands remain the repository-wide quality gate.
 
 ## Contract

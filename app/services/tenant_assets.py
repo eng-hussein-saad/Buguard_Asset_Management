@@ -181,35 +181,76 @@ async def get_owned_asset(
     return asset
 
 
-async def create_asset(
-    session: AsyncSession, current_user: User, payload: AssetCreate
-) -> AssetRead:
-    """Create an asset for the current user's organization after RBAC checks."""
-    require_permission(current_user.role, Permission.CREATE_ASSET)
-    normalized_value = normalize_asset_value(payload.type.value, payload.value)
-    duplicate = await asset_repository.get_duplicate_for_organization(
-        session, current_user.organization_id, payload.type.value, normalized_value
+async def observe_asset(
+    session: AsyncSession,
+    organization_id: UUID,
+    *,
+    asset_type: str,
+    value: str,
+    explicit_status: str | None,
+    source: str | None,
+    tags: list[str] | None,
+    metadata: dict[str, Any] | None,
+) -> tuple[Asset, bool]:
+    """Create or refresh one observed asset using import lifecycle semantics."""
+    observed_at = datetime.now(UTC)
+    normalized_value = normalize_asset_value(asset_type, value)
+    existing = await asset_repository.get_by_org_type_value(
+        session,
+        organization_id,
+        asset_type,
+        normalized_value,
     )
-    if duplicate is not None:
-        raise DuplicateAssetError()
-    try:
+    if existing is None:
         asset = await asset_repository.create_asset(
             session,
-            current_user.organization_id,
-            payload.type.value,
+            organization_id,
+            asset_type,
             normalized_value,
-            payload.status.value,
-            payload.first_seen,
-            payload.last_seen,
-            payload.source,
-            payload.tags,
-            payload.metadata,
+            resolve_import_status(None, explicit_status),
+            observed_at,
+            observed_at,
+            source,
+            merge_import_tags([], tags),
+            dict(metadata or {}),
+        )
+        return asset, True
+
+    asset = await asset_repository.update_imported_asset(
+        session,
+        existing,
+        status=resolve_import_status(existing.status, explicit_status),
+        last_seen=observed_at,
+        source=source if source is not None else existing.source,
+        tags=merge_import_tags(existing.tags, tags),
+        metadata=merge_import_metadata(existing.asset_metadata, metadata),
+    )
+    return asset, False
+
+
+async def create_asset(
+    session: AsyncSession, current_user: User, payload: AssetCreate
+) -> tuple[AssetRead, bool]:
+    """Create or refresh one asset observation for the current organization."""
+    require_permission(current_user.role, Permission.CREATE_ASSET)
+    try:
+        asset, created = await observe_asset(
+            session,
+            current_user.organization_id,
+            asset_type=payload.type.value,
+            value=payload.value,
+            explicit_status=(
+                payload.status.value if "status" in payload.model_fields_set else None
+            ),
+            source=payload.source,
+            tags=payload.tags,
+            metadata=payload.metadata,
         )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
         raise DuplicateAssetError() from exc
-    return AssetRead.from_model(asset)
+    return AssetRead.from_model(asset), created
 
 
 async def read_asset(
@@ -267,44 +308,19 @@ async def import_assets(
                 summary.errors.append(error or _reject_record(index, "Invalid record."))
                 continue
 
-            observed_at = datetime.now(UTC)
-            existing = await asset_repository.get_by_org_type_value(
+            _, created = await observe_asset(
                 session,
                 current_user.organization_id,
-                str(record["type"]),
-                str(record["value"]),
+                asset_type=str(record["type"]),
+                value=str(record["value"]),
+                explicit_status=record["status"],
+                source=record["source"],
+                tags=record["tags"],
+                metadata=record["metadata"],
             )
-            if existing is None:
-                await asset_repository.create_asset(
-                    session,
-                    current_user.organization_id,
-                    str(record["type"]),
-                    str(record["value"]),
-                    resolve_import_status(None, record["status"]),
-                    observed_at,
-                    observed_at,
-                    record["source"],
-                    merge_import_tags([], record["tags"]),
-                    dict(record["metadata"]),
-                )
+            if created:
                 summary.created += 1
                 continue
-
-            await asset_repository.update_imported_asset(
-                session,
-                existing,
-                status=resolve_import_status(existing.status, record["status"]),
-                last_seen=observed_at,
-                source=(
-                    record["source"]
-                    if record["source"] is not None
-                    else existing.source
-                ),
-                tags=merge_import_tags(existing.tags, record["tags"]),
-                metadata=merge_import_metadata(
-                    existing.asset_metadata, record["metadata"]
-                ),
-            )
             summary.updated += 1
         if summary.created or summary.updated:
             await session.commit()

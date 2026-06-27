@@ -61,18 +61,22 @@ def list_params(
     "",
     response_model=AssetRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Create an organization-owned asset",
+    summary="Create or refresh one organization-owned asset observation",
     responses={
         code: response for code, response in ERROR_RESPONSES.items() if code != 404
     },
 )
 async def create_asset(
     payload: AssetCreate,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> AssetRead:
-    """Create an asset under the authenticated user's organization."""
-    return await tenant_assets.create_asset(session, current_user, payload)
+    """Create a new asset or refresh an existing observation lifecycle."""
+    asset, created = await tenant_assets.create_asset(session, current_user, payload)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return asset
 
 
 @router.get(

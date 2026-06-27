@@ -94,7 +94,7 @@ viewer:
 
 analyst:
 - viewer permissions
-- create assets
+- create or refresh asset observations
 - update assets
 - bulk import assets
 - mark assets stale
@@ -163,7 +163,9 @@ Therefore, asset uniqueness is enforced using:
 UNIQUE (organization_id, type, value)
 ```
 
-This means Organization A and Organization B can both have `api.example.com`, but the same organization cannot create duplicate copies of the same asset.
+This means Organization A and Organization B can both have `api.example.com`.
+Within one organization, a new observation for an existing `(type, value)` must
+refresh the existing asset instead of creating a duplicate copy.
 
 ### 11. Relationships cannot cross organizations
 
@@ -198,15 +200,27 @@ organization switching endpoint
 one access token per active organization context
 ```
 
-### 14. The sample dataset is imported through the bulk import endpoint
+### 14. Assets are ingested as observations
+
+The system treats asset creation as recording an observation, not as a strict
+append-only CRUD insert. A single asset observation can be submitted through:
+
+```txt
+POST /assets
+```
+
+Batch observations from the sample dataset are submitted through:
 
 No live scanning or external asset discovery is implemented.
-
-The system assumes assets are provided through the sample JSON dataset and imported using:
 
 ```txt
 POST /assets/import
 ```
+
+Both paths must use the same lifecycle semantics: match by authenticated
+organization, type, and canonical value; create if missing; otherwise preserve
+`first_seen`, refresh `last_seen`, merge tags, merge metadata, and apply
+lifecycle reactivation rules.
 
 ### 15. Core backend features take priority over bonuses
 
@@ -657,7 +671,7 @@ viewer:
 
 analyst:
 - viewer permissions
-- create assets
+- create or refresh asset observations
 - update assets
 - bulk import assets
 - mark assets stale
@@ -762,6 +776,10 @@ Phase 2: Implement the multi-tenant database model, seeded users, JWT authentica
 Implement the core asset API with professional validation, structured errors, tenant scoping, and OpenAPI documentation.
 
 This combines CRUD and API polish because validation and error handling should be built into the routes from the beginning rather than added later.
+`POST /assets` is an observation endpoint: it creates a new asset when no
+matching asset exists in the authenticated organization, and refreshes the
+existing asset when the same organization, type, and canonical value already
+exist.
 
 ## Scope
 
@@ -844,11 +862,36 @@ organization_id = current_user.organization_id
 
 The API must never accept `organization_id` in asset create/update request bodies.
 
+## Single-Asset Observation Behavior
+
+For `POST /assets`, match existing assets using:
+
+```txt
+current_user.organization_id + type + canonical value
+```
+
+If no asset exists, create one and set server-owned lifecycle timestamps.
+
+If the asset already exists:
+
+```txt
+do not create duplicate
+preserve first_seen
+refresh last_seen using server time
+merge tags without duplicates
+shallow-merge metadata with newest values winning conflicts
+reactivate stale assets
+keep archived assets archived unless status=active is explicit
+```
+
+Return HTTP 201 when a new asset is created and HTTP 200 when an existing asset
+observation is refreshed.
+
 ## Suggested Spec Kit Prompt
 
 ```txt
 /speckit.specify
-Phase 3: Implement tenant-scoped asset CRUD with filtering, sorting, pagination, validation, structured errors, and OpenAPI polish. All asset operations must derive organization_id from the authenticated user context. The list endpoint must support filtering by type, status, tag, source, and value_contains, plus sorting and pagination. Viewer users may read assets, analyst/admin users may create and update assets, and only admin users may delete or archive assets.
+Phase 3: Implement tenant-scoped asset CRUD with filtering, sorting, pagination, validation, structured errors, and OpenAPI polish. All asset operations must derive organization_id from the authenticated user context. POST /assets must behave as a single-asset observation endpoint: create when the canonical organization/type/value does not exist, otherwise refresh last_seen, merge tags and metadata, preserve first_seen, and apply lifecycle reactivation rules. The list endpoint must support filtering by type, status, tag, source, and value_contains, plus sorting and pagination. Viewer users may read assets, analyst/admin users may create or refresh and update assets, and only admin users may delete or archive assets.
 ```
 
 ## Deliverables
@@ -864,7 +907,9 @@ Phase 3: Implement tenant-scoped asset CRUD with filtering, sorting, pagination,
 
 ## Acceptance Criteria
 
-* Assets can be created, listed, read, updated, and deleted/archived.
+* Assets can be created or refreshed, listed, read, updated, and deleted/archived.
+* Re-submitting an existing asset through `POST /assets` refreshes it instead
+  of returning a duplicate conflict.
 * Asset create/update payloads do not accept `organization_id`.
 * List endpoint does not return assets from other organizations.
 * Filtering works.
@@ -888,11 +933,16 @@ This phase focuses on making the system behave like a real asset inventory rathe
 
 ## Scope
 
-Endpoint:
+Endpoints:
 
 ```txt
+POST /assets
 POST /assets/import
 ```
+
+`POST /assets` performs the same create-or-refresh lifecycle operation for one
+asset observation that `POST /assets/import` performs for each valid record in a
+batch.
 
 Add or support:
 
@@ -909,9 +959,9 @@ PATCH /assets/{asset_id}
 }
 ```
 
-## Import Behavior
+## Observation Behavior
 
-For each imported asset:
+For a single submitted asset or each imported asset:
 
 If asset does not exist within the organization:
 
@@ -927,10 +977,11 @@ If asset already exists within the organization:
 ```txt
 do not create duplicate
 preserve first_seen
-update last_seen
+update last_seen using server time
 merge tags
 merge metadata
-set status to active if re-sighted
+set status to active if stale and re-sighted
+keep archived unless status=active is explicit
 ```
 
 ## Partial Failure Handling
@@ -961,12 +1012,15 @@ Return a summary:
 * `stale` means previously observed but not recently seen.
 * `archived` means removed from active operational use.
 * A stale asset seen again becomes active.
+* An archived asset seen again remains archived unless the observation
+  explicitly requests `status=active`.
 
 ## Edge Cases
 
 Handle:
 
 * Same dataset imported twice
+* Same single asset submitted twice through `POST /assets`
 * Same asset with conflicting metadata
 * Same asset with new tags
 * Stale asset reappearing
@@ -978,7 +1032,7 @@ Handle:
 
 ```txt
 /speckit.specify
-Phase 4: Implement tenant-scoped bulk import, deduplication, lifecycle handling, and import edge cases. Importing the same dataset twice must not create duplicates. Existing assets are matched by organization_id, type, and canonical value. Re-sighted assets preserve first_seen, update last_seen, merge tags and metadata, and become active again if stale. Malformed records should be reported in the import response without crashing the entire batch.
+Phase 4: Implement tenant-scoped asset observation semantics, bulk import, deduplication, lifecycle handling, and import edge cases. POST /assets must perform the same create-or-refresh operation for one asset that POST /assets/import performs for each valid record. Importing the same dataset twice or submitting the same single asset twice must not create duplicates. Existing assets are matched by organization_id, type, and canonical value. Re-sighted assets preserve first_seen, update last_seen, merge tags and metadata, and become active again if stale. Archived assets stay archived unless status=active is explicit. Malformed batch records should be reported in the import response without crashing the entire batch.
 ```
 
 ## Deliverables
@@ -986,6 +1040,7 @@ Phase 4: Implement tenant-scoped bulk import, deduplication, lifecycle handling,
 * Import schemas
 * Import route
 * Import service
+* Shared single-asset and bulk-import observation helper
 * Deduplication logic
 * Metadata merge strategy
 * Tag merge strategy
@@ -996,6 +1051,8 @@ Phase 4: Implement tenant-scoped bulk import, deduplication, lifecycle handling,
 ## Acceptance Criteria
 
 * Importing the same dataset twice does not increase asset count.
+* Submitting the same asset twice through `POST /assets` does not increase asset
+  count and refreshes the existing observation.
 * Import payloads do not accept or trust `organization_id`.
 * Tags are merged without duplicates.
 * Metadata is merged predictably.
@@ -1221,7 +1278,7 @@ organization_id
 Cache must be invalidated after:
 
 ```txt
-asset create/update/delete
+asset create/refresh/update/delete
 bulk import
 relationship create/delete
 mark stale
