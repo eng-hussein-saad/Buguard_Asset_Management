@@ -32,4 +32,4 @@
 ## Notes
 
 - Validation passed for the initial Phase 5 specification.
-- Scope is limited to asset relationships, relationship listing, graph retrieval, and optional simple graph visualization.
+- Scope is limited to asset relationships, relationship listing, graph retrieval, and simple graph visualization.
