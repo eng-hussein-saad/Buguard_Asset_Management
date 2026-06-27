@@ -1,20 +1,19 @@
 <!--
 Sync Impact Report
-Version change: template -> 1.0.0
+Version change: 1.0.0 -> 1.1.0
 Modified principles:
-- Template principle 1 -> I. Tenant Isolation Is Mandatory
-- Template principle 2 -> II. Security-Sensitive Defaults
-- Template principle 3 -> III. Testable Spec-Driven Delivery
-- Template principle 4 -> IV. Asset Lifecycle Integrity
-- Template principle 5 -> V. Operational Reproducibility
+- I. Tenant Isolation Is Mandatory: unchanged
+- II. Security-Sensitive Defaults: unchanged
+- III. Testable Spec-Driven Delivery: unchanged
+- IV. Asset Lifecycle Integrity: unchanged
+- V. Operational Reproducibility: unchanged
 Added sections:
-- Backend Architecture Constraints
-- Delivery Workflow and Quality Gates
+- Code Documentation
 Removed sections:
-- Placeholder template guidance
+- None
 Templates requiring updates:
 - .specify/templates/plan-template.md: updated
-- .specify/templates/spec-template.md: updated
+- .specify/templates/spec-template.md: reviewed, no update required
 - .specify/templates/tasks-template.md: updated
 - .specify/templates/checklist-template.md: reviewed, no update required
 - .specify/templates/commands/*.md: not present
@@ -88,6 +87,14 @@ Structured errors MUST be used for domain failures such as missing assets,
 forbidden actions, duplicate relationships, and invalid lifecycle transitions.
 Caching, rate limiting, and AI analysis MUST never bypass tenant scoping.
 
+## Code Documentation
+
+All new or modified Python functions, class methods, and service/repository
+methods MUST include a concise docstring explaining what the function does and
+any important side effects. Comments MUST avoid restating the code. Inline
+comments SHOULD be used only for non-obvious logic, assumptions, or important
+implementation decisions.
+
 ## Delivery Workflow and Quality Gates
 
 Each phase MUST follow the Spec Kit flow in `PLAN.md`: specify, clarify where
@@ -117,4 +124,4 @@ intentional violation MUST be documented in the feature plan's Complexity
 Tracking table with the simpler alternative considered and the reason it was
 rejected.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-06-25
+**Version**: 1.1.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-06-27

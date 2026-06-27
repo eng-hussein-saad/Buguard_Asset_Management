@@ -13,6 +13,11 @@ research.md, data-model.md, contracts/
 tenant isolation, RBAC, security-sensitive flows, lifecycle integrity, imports,
 relationships, rate limiting, and AI grounding where relevant.
 
+**Code Documentation**: Include tasks for concise docstrings on all new or
+modified Python functions, class methods, and service/repository methods. Avoid
+inline comments unless they explain non-obvious logic, assumptions, or important
+implementation decisions.
+
 **Organization**: Tasks are grouped by user story to enable independent
 implementation and testing of each story.
 
@@ -144,6 +149,7 @@ implementation and testing of each story.
 **Purpose**: Improvements that affect multiple user stories
 
 - [ ] TXXX [P] Documentation updates in README.md or docs/
+- [ ] TXXX [P] Add or update concise docstrings for modified Python functions, class methods, services, and repositories
 - [ ] TXXX [P] README and `.env.example` updates for new configuration or commands
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories

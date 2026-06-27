@@ -42,6 +42,7 @@ environment-driven configuration, reproducible local and Docker startup
 - **Test coverage**: Automated tests are identified for tenant isolation, RBAC, data integrity, lifecycle behavior, import edge cases, graph relationships, rate limits, and AI grounding where relevant.
 - **Lifecycle integrity**: Deduplication, `first_seen`, `last_seen`, tag/metadata merge behavior, stale reactivation, and partial import failure reporting are preserved where asset ingestion is touched.
 - **Operational reproducibility**: `.env.example`, Docker Compose, migrations, README commands, lint/test commands, and graceful optional-service behavior are updated where relevant.
+- **Code documentation**: New or modified Python functions, class methods, and service/repository methods have concise docstrings, and inline comments are reserved for non-obvious logic or assumptions.
 
 ## Project Structure
 
