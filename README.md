@@ -22,35 +22,35 @@ cross-organization reports, and multi-hop graph traversal are out of scope.
 
 ## Prerequisites
 
-- Python 3.13
-- uv
-- Docker and Docker Compose
+- Python 3.13 and uv for host-based local development
+- Docker and Docker Compose for the containerized stack
 
 ## Environment
 
-Create a local `.env` from `.env.example` and set a development database URL:
+Create a `.env` file in the project root before starting Docker Compose. Use
+`.env.example` as the key list, and provide a value for each key:
 
 ```bash
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/buguard
-JWT_SECRET_KEY=change-me-in-local-dev
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=7
-CACHE_URL=redis://localhost:6379/0
-CACHE_TTL_SECONDS=300
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_LOGIN_ATTEMPTS=5
-RATE_LIMIT_REFRESH_ATTEMPTS=10
-RATE_LIMIT_BULK_IMPORT_ATTEMPTS=10
-RATE_LIMIT_AI_ANALYSIS_ATTEMPTS=5
+DATABASE_URL=
+JWT_SECRET_KEY=
+JWT_ALGORITHM=
+ACCESS_TOKEN_EXPIRE_MINUTES=
+REFRESH_TOKEN_EXPIRE_DAYS=
+CACHE_URL=
+CACHE_TTL_SECONDS=
+RATE_LIMIT_WINDOW_SECONDS=
+RATE_LIMIT_LOGIN_ATTEMPTS=
+RATE_LIMIT_REFRESH_ATTEMPTS=
+RATE_LIMIT_BULK_IMPORT_ATTEMPTS=
+RATE_LIMIT_AI_ANALYSIS_ATTEMPTS=
 ANALYSIS_PROVIDER=
 ANALYSIS_MODEL=
 ANALYSIS_API_KEY=
 ANALYSIS_BASE_URL=
 ANALYSIS_HTTP_REFERER=
 ANALYSIS_APP_TITLE=
-ANALYSIS_TIMEOUT_SECONDS=30
-ANALYSIS_EVIDENCE_LIMIT=50
+ANALYSIS_TIMEOUT_SECONDS=
+ANALYSIS_EVIDENCE_LIMIT=
 ```
 
 `DATABASE_URL` is required. If it is missing or malformed, the application fails
@@ -58,7 +58,7 @@ startup with a sanitized configuration error that does not print the provided
 secret value.
 
 `JWT_SECRET_KEY` must be changed in real deployments and kept local-only. The
-default access-token lifetime is 15 minutes and the default refresh-token
+reviewer/default access-token lifetime is 60 minutes and the default refresh-token
 lifetime is 7 days.
 
 `CACHE_URL` points to the optional Redis-compatible cache. If it is absent or
@@ -70,35 +70,24 @@ database-backed results. `CACHE_TTL_SECONDS` controls cached read lifetime.
 `RATE_LIMIT_AI_ANALYSIS_ATTEMPTS` define the fixed-window policy.
 
 `ANALYSIS_PROVIDER`, `ANALYSIS_MODEL`, `ANALYSIS_API_KEY`, and
-`ANALYSIS_BASE_URL` configure the LangChain analysis provider. For OpenRouter's
-free NVIDIA Nemotron 3 Ultra model, use:
-
-```bash
-ANALYSIS_PROVIDER=openrouter
-ANALYSIS_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
-ANALYSIS_API_KEY=<your_openrouter_key>
-ANALYSIS_BASE_URL=https://openrouter.ai/api/v1
-ANALYSIS_HTTP_REFERER=http://localhost:8000
-ANALYSIS_APP_TITLE=Buguard Asset Management
-```
-
-`ANALYSIS_HTTP_REFERER` and `ANALYSIS_APP_TITLE` are optional OpenRouter
+`ANALYSIS_BASE_URL` configure the LangChain analysis provider.
+`ANALYSIS_HTTP_REFERER` and `ANALYSIS_APP_TITLE` are optional provider
 attribution headers. If the provider name or API key is absent, the API still
 starts and core asset workflows keep working; `/analysis/report` returns a
 structured `analysis_unavailable` response. `ANALYSIS_TIMEOUT_SECONDS` and
 `ANALYSIS_EVIDENCE_LIMIT` document the bounded provider input policy.
 
-## Install
+## Run The Stack
+
+Docker Compose builds the API image, starts PostgreSQL and Redis, runs Alembic,
+and then starts the API service.
 
 ```bash
-uv sync --all-groups
+docker compose up --build
 ```
 
-## Run Locally
-
-```bash
-uv run uvicorn app.main:app --reload
-```
+If your Docker installation exposes the legacy command, use
+`docker-compose up --build` instead.
 
 Verify the health endpoint in another shell:
 
@@ -109,17 +98,11 @@ curl http://localhost:8000/health
 Expected response:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
-## Docker Compose
-
-```bash
-docker compose up --build
-```
-
-If your Docker installation exposes the legacy command, use
-`docker-compose up --build` instead.
+Docker Compose reads the API configuration from the project `.env` file and
+passes those variables to the API container.
 
 Default ports:
 
@@ -127,11 +110,29 @@ Default ports:
 - PostgreSQL: `localhost:5432`
 - Redis-compatible cache: `localhost:6379`
 
-The `api` service receives:
+The `api` service receives these keys from `.env`:
 
 ```bash
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/buguard
-CACHE_URL=redis://redis:6379/0
+DATABASE_URL
+CACHE_URL
+JWT_SECRET_KEY
+JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS
+CACHE_TTL_SECONDS
+RATE_LIMIT_WINDOW_SECONDS
+RATE_LIMIT_LOGIN_ATTEMPTS
+RATE_LIMIT_REFRESH_ATTEMPTS
+RATE_LIMIT_BULK_IMPORT_ATTEMPTS
+RATE_LIMIT_AI_ANALYSIS_ATTEMPTS
+ANALYSIS_PROVIDER
+ANALYSIS_MODEL
+ANALYSIS_API_KEY
+ANALYSIS_BASE_URL
+ANALYSIS_HTTP_REFERER
+ANALYSIS_APP_TITLE
+ANALYSIS_TIMEOUT_SECONDS
+ANALYSIS_EVIDENCE_LIMIT
 ```
 
 Verify the API:
@@ -154,7 +155,9 @@ Expected output:
 
 ## Alembic
 
-With `DATABASE_URL` configured:
+Docker Compose runs Alembic automatically before starting the API service. Run
+this command only when using a local database outside the API container and
+`DATABASE_URL` is configured:
 
 ```bash
 uv run alembic upgrade head
@@ -167,10 +170,10 @@ assets, and asset relationships.
 
 ```bash
 uv run python scripts/seed.py
-uv run python scripts/seed.py
 ```
 
-The second run is idempotent. Seeded credentials:
+Optional: run the command again to verify the seed script is idempotent. Seeded
+credentials:
 
 ```text
 admin@example.com / password123
@@ -430,7 +433,7 @@ Expected result: HTTP 200 with body `{"status":"ok"}`.
 Request body:
 
 ```json
-{"email":"admin@example.com","password":"password123"}
+{ "email": "admin@example.com", "password": "password123" }
 ```
 
 Request:
@@ -449,7 +452,7 @@ and `expires_in`.
 Request body:
 
 ```json
-{"email":"rate-limit@example.com","password":"wrong-password"}
+{ "email": "rate-limit@example.com", "password": "wrong-password" }
 ```
 
 Request:
@@ -471,7 +474,7 @@ credentials; the 6th attempt within 60 seconds returns HTTP 429 with
 Request body:
 
 ```json
-{"refresh_token":"<current_refresh_token>"}
+{ "refresh_token": "<current_refresh_token>" }
 ```
 
 Request:
@@ -492,7 +495,7 @@ The submitted refresh token is revoked and cannot be reused.
 Request body shape:
 
 ```json
-{"refresh_token":"<latest_refresh_token>"}
+{ "refresh_token": "<latest_refresh_token>" }
 ```
 
 Request:
@@ -532,7 +535,7 @@ organization id, role, and active status.
 Request body:
 
 ```json
-{"refresh_token":"<latest_refresh_token>"}
+{ "refresh_token": "<latest_refresh_token>" }
 ```
 
 Request:
@@ -556,7 +559,7 @@ Request body:
   "status": "active",
   "source": "manual-test",
   "tags": ["manual", "phase6"],
-  "metadata": {"owner": "security"}
+  "metadata": { "owner": "security" }
 }
 ```
 
@@ -594,7 +597,7 @@ returns `X-Cache: HIT`.
 Request body:
 
 ```json
-{"status":"stale","tags":["manual","phase6","reviewed"]}
+{ "status": "stale", "tags": ["manual", "phase6", "reviewed"] }
 ```
 
 Request:
@@ -624,7 +627,7 @@ Request body:
       "value": "Bulk-One.Example.com",
       "source": "manual-import",
       "tags": ["bulk"],
-      "metadata": {"owner": "security"}
+      "metadata": { "owner": "security" }
     },
     {
       "type": "subdomain",
@@ -653,9 +656,9 @@ Request body:
 ```json
 {
   "items": [
-    {"type": "domain", "value": "valid-import.example.com"},
-    {"type": "domain", "value": ""},
-    {"type": "unsupported", "value": "bad.example.com"}
+    { "type": "domain", "value": "valid-import.example.com" },
+    { "type": "domain", "value": "" },
+    { "type": "unsupported", "value": "bad.example.com" }
   ]
 }
 ```
@@ -678,7 +681,7 @@ HTTP 422.
 Request body:
 
 ```json
-{"items":[{"type":"domain","value":"rate-limit-import.example.com"}]}
+{ "items": [{ "type": "domain", "value": "rate-limit-import.example.com" }] }
 ```
 
 Request:
@@ -700,7 +703,7 @@ the 11th returns HTTP 429 with `details.operation` set to `bulk_import`.
 Request body:
 
 ```json
-{"items":[{"type":"domain","value":"viewer-import.example.com"}]}
+{ "items": [{ "type": "domain", "value": "viewer-import.example.com" }] }
 ```
 
 Request:
@@ -734,7 +737,7 @@ Request body:
   "source_asset_id": "<asset_id>",
   "target_asset_id": "<target_asset_id>",
   "relationship_type": "resolves_to",
-  "metadata": {"source": "manual-test"}
+  "metadata": { "source": "manual-test" }
 }
 ```
 
@@ -823,11 +826,27 @@ Example certificate records:
 
 ```json
 [
-  {"type": "certificate", "value": "expired-cert", "metadata": {"expires": "2020-01-01"}},
-  {"type": "certificate", "value": "soon-cert", "metadata": {"expires": "2026-07-15"}},
-  {"type": "certificate", "value": "valid-cert", "metadata": {"expires": "2027-01-01"}},
-  {"type": "certificate", "value": "missing-expiry", "metadata": {}},
-  {"type": "certificate", "value": "bad-expiry", "metadata": {"expires": "not-a-date"}}
+  {
+    "type": "certificate",
+    "value": "expired-cert",
+    "metadata": { "expires": "2020-01-01" }
+  },
+  {
+    "type": "certificate",
+    "value": "soon-cert",
+    "metadata": { "expires": "2026-07-15" }
+  },
+  {
+    "type": "certificate",
+    "value": "valid-cert",
+    "metadata": { "expires": "2027-01-01" }
+  },
+  { "type": "certificate", "value": "missing-expiry", "metadata": {} },
+  {
+    "type": "certificate",
+    "value": "bad-expiry",
+    "metadata": { "expires": "not-a-date" }
+  }
 ]
 ```
 
@@ -902,11 +921,11 @@ when both assets belong to the authenticated user's organization.
 
 Role matrix:
 
-| Role | Allowed |
-| --- | --- |
-| viewer | Read assets, relationships, and graph data |
+| Role    | Allowed                                                                                            |
+| ------- | -------------------------------------------------------------------------------------------------- |
+| viewer  | Read assets, relationships, and graph data                                                         |
 | analyst | Viewer permissions plus asset create/update, bulk import, stale marking, and relationship creation |
-| admin | Analyst permissions plus delete/archive operations |
+| admin   | Analyst permissions plus delete/archive operations                                                 |
 
 ## Quality Checks
 
@@ -937,7 +956,7 @@ GET /health
 Response:
 
 ```json
-{"status":"ok"}
+{ "status": "ok" }
 ```
 
 The source contract lives at
