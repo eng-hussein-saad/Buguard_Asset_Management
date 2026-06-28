@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
@@ -14,6 +14,7 @@ from app.schemas.assets import AssetGraph, AssetListParams, PaginatedAssets
 logger = logging.getLogger(__name__)
 _MEMORY_CACHE: dict[str, str] = {}
 _MEMORY_NAMESPACES: dict[str, int] = {}
+CacheStatus = Literal["HIT", "MISS", "BYPASS"]
 
 
 class CacheService:
@@ -23,6 +24,8 @@ class CacheService:
         """Create a cache service using an optional Redis-compatible store."""
         self.settings = settings
         self.store = store
+        self.last_status: CacheStatus = "BYPASS"
+        self._last_lookup_unavailable = False
 
     async def get_asset_list(
         self, organization_id: UUID, params: AssetListParams
@@ -30,7 +33,11 @@ class CacheService:
         """Return a cached asset list when a valid scoped payload exists."""
         key = await self.asset_list_key(organization_id, params)
         model = await self._get_model(key, PaginatedAssets)
-        return model if isinstance(model, PaginatedAssets) else None
+        if isinstance(model, PaginatedAssets):
+            self.last_status = "HIT"
+            return model
+        self.last_status = "BYPASS" if self._last_lookup_unavailable else "MISS"
+        return None
 
     async def set_asset_list(
         self, organization_id: UUID, params: AssetListParams, payload: PaginatedAssets
@@ -45,7 +52,11 @@ class CacheService:
         """Return a cached graph when a valid scoped payload exists."""
         key = await self.asset_graph_key(organization_id, asset_id)
         model = await self._get_model(key, AssetGraph)
-        return model if isinstance(model, AssetGraph) else None
+        if isinstance(model, AssetGraph):
+            self.last_status = "HIT"
+            return model
+        self.last_status = "BYPASS" if self._last_lookup_unavailable else "MISS"
+        return None
 
     async def set_asset_graph(
         self, organization_id: UUID, asset_id: UUID, payload: AssetGraph
@@ -121,13 +132,17 @@ class CacheService:
                     await self.store.set(key, raw, ex=self.settings.cache_ttl_seconds)
                     return
                 except Exception:
-                    pass
+                    logger.info(
+                        "External cache set unavailable", extra={"cache_key": key}
+                    )
+                    return
             _MEMORY_CACHE[key] = raw
         except Exception:
             logger.info("Cache set unavailable", extra={"cache_key": key})
 
     async def _get_raw(self, key: str) -> str | None:
         """Read raw JSON from Redis or the in-process fallback cache."""
+        self._last_lookup_unavailable = False
         if self.store is not None:
             try:
                 value = await self.store.get(key)
@@ -136,7 +151,9 @@ class CacheService:
                 if isinstance(value, str):
                     return value
             except Exception:
-                pass
+                self._last_lookup_unavailable = True
+                logger.info("External cache get unavailable", extra={"cache_key": key})
+                return None
         return _MEMORY_CACHE.get(key)
 
     def _namespace_key(self, namespace: str, organization_id: UUID) -> str:

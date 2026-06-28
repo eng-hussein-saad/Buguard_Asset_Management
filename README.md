@@ -349,6 +349,445 @@ Cached payloads are never shared across organizations. If the cache service is
 unavailable or returns invalid data, the API falls back to database reads and
 continues returning tenant-scoped results.
 
+Cached read endpoints include an `X-Cache` response header. `X-Cache: MISS`
+means the request was served from the database and then cached. `X-Cache: HIT`
+means the response was served from cache. `X-Cache: BYPASS` means the
+configured cache service was unavailable, so the API skipped cache usage and
+served the database result.
+
+## Manual Test Cases
+
+Run the local stack before testing:
+
+```bash
+uv sync --all-groups
+docker compose up -d db redis
+uv run alembic upgrade head
+uv run python scripts/seed.py
+uv run uvicorn app.main:app --reload
+```
+
+Use this helper login sequence to capture tokens for later requests:
+
+```bash
+ADMIN_LOGIN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password123"}')
+ADMIN_ACCESS_TOKEN=$(echo "$ADMIN_LOGIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+ADMIN_REFRESH_TOKEN=$(echo "$ADMIN_LOGIN" | sed -n 's/.*"refresh_token":"\([^"]*\)".*/\1/p')
+
+ANALYST_LOGIN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"analyst@example.com","password":"password123"}')
+ANALYST_ACCESS_TOKEN=$(echo "$ANALYST_LOGIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+
+VIEWER_LOGIN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"viewer@example.com","password":"password123"}')
+VIEWER_ACCESS_TOKEN=$(echo "$VIEWER_LOGIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+```
+
+### Health Check
+
+Request:
+
+```bash
+curl -i http://localhost:8000/health
+```
+
+Expected result: HTTP 200 with body `{"status":"ok"}`.
+
+### Login Success
+
+Request body:
+
+```json
+{"email":"admin@example.com","password":"password123"}
+```
+
+Request:
+
+```bash
+curl -i -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password123"}'
+```
+
+Expected result: HTTP 200 with `access_token`, `refresh_token`, `token_type`,
+and `expires_in`.
+
+### Login Rate Limit
+
+Request body:
+
+```json
+{"email":"rate-limit@example.com","password":"wrong-password"}
+```
+
+Request:
+
+```bash
+for i in {1..6}; do
+  curl -i -X POST http://localhost:8000/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"rate-limit@example.com","password":"wrong-password"}'
+done
+```
+
+Expected result: attempts below the threshold return HTTP 401 for invalid
+credentials; the 6th attempt within 60 seconds returns HTTP 429 with
+`error.code` set to `rate_limited` and `details.operation` set to `login`.
+
+### Refresh Token Rotation
+
+Request body:
+
+```json
+{"refresh_token":"<current_refresh_token>"}
+```
+
+Request:
+
+```bash
+REFRESH_RESPONSE=$(curl -s -i -X POST http://localhost:8000/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$ADMIN_REFRESH_TOKEN\"}")
+echo "$REFRESH_RESPONSE"
+ADMIN_REFRESH_TOKEN=$(echo "$REFRESH_RESPONSE" | sed -n 's/.*"refresh_token":"\([^"]*\)".*/\1/p')
+```
+
+Expected result: HTTP 200 with a new `access_token` and a new `refresh_token`.
+The submitted refresh token is revoked and cannot be reused.
+
+### Refresh Rate Limit
+
+Request body shape:
+
+```json
+{"refresh_token":"<latest_refresh_token>"}
+```
+
+Request:
+
+```bash
+TOKEN="$ADMIN_REFRESH_TOKEN"
+for i in {1..11}; do
+  RESPONSE=$(curl -s -i -X POST http://localhost:8000/auth/refresh \
+    -H "Content-Type: application/json" \
+    -d "{\"refresh_token\":\"$TOKEN\"}")
+  echo "$RESPONSE"
+  NEW_TOKEN=$(echo "$RESPONSE" | sed -n 's/.*"refresh_token":"\([^"]*\)".*/\1/p')
+  if [ -n "$NEW_TOKEN" ]; then
+    TOKEN="$NEW_TOKEN"
+  fi
+done
+```
+
+Expected result: the first 10 valid refresh attempts within 60 seconds return
+HTTP 200 and rotate the token; the 11th returns HTTP 429 with `error.code` set
+to `rate_limited` and `details.operation` set to `refresh`.
+
+### Current User
+
+Request:
+
+```bash
+curl -i http://localhost:8000/auth/me \
+  -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN"
+```
+
+Expected result: HTTP 200 with the authenticated user's id, email,
+organization id, role, and active status.
+
+### Logout
+
+Request body:
+
+```json
+{"refresh_token":"<latest_refresh_token>"}
+```
+
+Request:
+
+```bash
+curl -i -X POST http://localhost:8000/auth/logout \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$TOKEN\"}"
+```
+
+Expected result: HTTP 204. Reusing that refresh token returns HTTP 401.
+
+### Create Or Refresh Asset
+
+Request body:
+
+```json
+{
+  "type": "domain",
+  "value": "Manual-Test.Example.com",
+  "status": "active",
+  "source": "manual-test",
+  "tags": ["manual", "phase6"],
+  "metadata": {"owner": "security"}
+}
+```
+
+Request:
+
+```bash
+ASSET_CREATE=$(curl -s -X POST http://localhost:8000/assets \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"domain","value":"Manual-Test.Example.com","status":"active","source":"manual-test","tags":["manual","phase6"],"metadata":{"owner":"security"}}')
+ASSET_ID=$(echo "$ASSET_CREATE" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+echo "$ASSET_CREATE"
+```
+
+Expected result: HTTP 201 for a new asset, or HTTP 200 if the same
+organization/type/canonical value already exists. The response value is
+canonicalized to lowercase for domains.
+
+### List Assets With Filters
+
+Request:
+
+```bash
+curl -i "http://localhost:8000/assets?type=domain&status=active&tag=manual&source=manual-test&value_contains=manual-test&sort_by=value&sort_order=asc&page=1&page_size=20" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+```
+
+Expected result: HTTP 200 with `items`, `page`, `page_size`, `total`,
+`total_pages`, `has_next`, and `has_previous`. For cacheable list reads, the
+first identical request returns `X-Cache: MISS`; repeating the same request
+returns `X-Cache: HIT`.
+
+### Update Asset And Cache Invalidation
+
+Request body:
+
+```json
+{"status":"stale","tags":["manual","phase6","reviewed"]}
+```
+
+Request:
+
+```bash
+curl -i -X PATCH "http://localhost:8000/assets/$ASSET_ID" \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"stale","tags":["manual","phase6","reviewed"]}'
+
+curl -i "http://localhost:8000/assets?status=stale&tag=reviewed" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+```
+
+Expected result: the patch returns HTTP 200, and the repeated list read reflects
+the updated status/tags instead of serving a stale cached list.
+
+### Bulk Import Success
+
+Request body:
+
+```json
+{
+  "items": [
+    {
+      "type": "domain",
+      "value": "Bulk-One.Example.com",
+      "source": "manual-import",
+      "tags": ["bulk"],
+      "metadata": {"owner": "security"}
+    },
+    {
+      "type": "subdomain",
+      "value": "Api.Bulk-One.Example.com",
+      "tags": ["api"]
+    }
+  ]
+}
+```
+
+Request:
+
+```bash
+curl -i -X POST http://localhost:8000/assets/import \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"type":"domain","value":"Bulk-One.Example.com","source":"manual-import","tags":["bulk"],"metadata":{"owner":"security"}},{"type":"subdomain","value":"Api.Bulk-One.Example.com","tags":["api"]}]}'
+```
+
+Expected result: HTTP 200 with `created`, `updated`, `failed`, and `errors`.
+
+### Bulk Import Partial Failure
+
+Request body:
+
+```json
+{
+  "items": [
+    {"type": "domain", "value": "valid-import.example.com"},
+    {"type": "domain", "value": ""},
+    {"type": "unsupported", "value": "bad.example.com"}
+  ]
+}
+```
+
+Request:
+
+```bash
+curl -i -X POST http://localhost:8000/assets/import \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"type":"domain","value":"valid-import.example.com"},{"type":"domain","value":""},{"type":"unsupported","value":"bad.example.com"}]}'
+```
+
+Expected result: HTTP 207 when at least one record is accepted and at least one
+record fails. If all records fail record-level validation, expected result is
+HTTP 422.
+
+### Bulk Import Rate Limit
+
+Request body:
+
+```json
+{"items":[{"type":"domain","value":"rate-limit-import.example.com"}]}
+```
+
+Request:
+
+```bash
+for i in {1..11}; do
+  curl -i -X POST http://localhost:8000/assets/import \
+    -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"items\":[{\"type\":\"domain\",\"value\":\"rate-limit-import-$i.example.com\"}]}"
+done
+```
+
+Expected result: the first 10 import attempts within 60 seconds are processed;
+the 11th returns HTTP 429 with `details.operation` set to `bulk_import`.
+
+### Viewer Import Is Forbidden
+
+Request body:
+
+```json
+{"items":[{"type":"domain","value":"viewer-import.example.com"}]}
+```
+
+Request:
+
+```bash
+curl -i -X POST http://localhost:8000/assets/import \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"type":"domain","value":"viewer-import.example.com"}]}'
+```
+
+Expected result: HTTP 403. Viewer requests are blocked by RBAC before import
+rate-limit checks.
+
+### Relationship Creation And Duplicate Prevention
+
+Create a second asset first:
+
+```bash
+TARGET_CREATE=$(curl -s -X POST http://localhost:8000/assets \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"ip","value":"203.0.113.10","source":"manual-test"}')
+TARGET_ASSET_ID=$(echo "$TARGET_CREATE" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+```
+
+Request body:
+
+```json
+{
+  "source_asset_id": "<asset_id>",
+  "target_asset_id": "<target_asset_id>",
+  "relationship_type": "resolves_to",
+  "metadata": {"source": "manual-test"}
+}
+```
+
+Request:
+
+```bash
+curl -i -X POST http://localhost:8000/relationships \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"source_asset_id\":\"$ASSET_ID\",\"target_asset_id\":\"$TARGET_ASSET_ID\",\"relationship_type\":\"resolves_to\",\"metadata\":{\"source\":\"manual-test\"}}"
+```
+
+Expected result: HTTP 201. Repeating the same request returns HTTP 409 with
+`DUPLICATE_RELATIONSHIP`.
+
+### Graph Retrieval And Cache
+
+Request:
+
+```bash
+curl -i "http://localhost:8000/assets/$ASSET_ID/graph" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+```
+
+Expected result: HTTP 200 with `center`, `nodes`, and `edges`. Repeating the
+same request returns `X-Cache: HIT`, while the response shape and tenant scope
+remain unchanged.
+
+### Cache Fallback When Redis Is Unavailable
+
+Request:
+
+```bash
+docker compose stop redis
+
+curl -i "http://localhost:8000/assets?page=1&page_size=20" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+
+curl -i "http://localhost:8000/assets/$ASSET_ID/graph" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+
+docker compose start redis
+```
+
+Expected result: reads still return HTTP 200 with correct organization-scoped
+database results while Redis is stopped, with `X-Cache: BYPASS`.
+
+### Tenant Isolation
+
+Log in as the other organization admin:
+
+```bash
+OTHER_LOGIN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"other-admin@example.com","password":"password123"}')
+OTHER_ACCESS_TOKEN=$(echo "$OTHER_LOGIN" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+```
+
+Request:
+
+```bash
+curl -i "http://localhost:8000/assets/$ASSET_ID" \
+  -H "Authorization: Bearer $OTHER_ACCESS_TOKEN"
+```
+
+Expected result: HTTP 404 with `ASSET_NOT_FOUND`; the API does not disclose
+that the asset exists in another organization.
+
+### CI Workflow
+
+Request body: not applicable; this is a repository workflow test.
+
+Manual check:
+
+```bash
+git push
+```
+
+Expected result: GitHub Actions runs the `Quality` workflow on `push` and
+`pull_request`, syncs locked dependencies, then runs Ruff, pytest, and mypy.
+
 ## Tenant Isolation and Roles
 
 Tenant-owned resources derive `organization_id` only from the authenticated

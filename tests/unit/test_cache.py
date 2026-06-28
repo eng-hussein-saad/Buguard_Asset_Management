@@ -51,6 +51,8 @@ async def test_cache_round_trip_invalidation_and_invalid_payload_fallback() -> N
 
     await service.set_asset_list(organization_id, params, payload)
     assert await service.get_asset_list(organization_id, params) == payload
+    assert service.last_status == "HIT"
 
     await service.invalidate_assets(organization_id, "asset_update")
     assert await service.get_asset_list(organization_id, params) is None
+    assert service.last_status == "MISS"

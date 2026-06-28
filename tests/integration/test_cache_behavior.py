@@ -77,4 +77,5 @@ async def test_cache_invalidation_and_unavailable_store_fallback() -> None:
 
     broken_cache = CacheService(_settings(), BrokenStore())
     await broken_cache.set_asset_list(organization_id, params, payload)
-    assert await broken_cache.get_asset_list(organization_id, params) == payload
+    assert await broken_cache.get_asset_list(organization_id, params) is None
+    assert broken_cache.last_status == "BYPASS"

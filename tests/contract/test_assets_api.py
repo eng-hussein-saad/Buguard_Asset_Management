@@ -184,6 +184,7 @@ async def test_asset_list_query_parameters_and_pagination_metadata(
         )
 
     assert response.status_code == 200
+    assert response.headers["x-cache"] == "BYPASS"
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["id"] == str(asset.id)
@@ -348,6 +349,7 @@ async def test_graph_routes_response_shapes(
         view_response = await client.get(f"/assets/{asset.id}/graph/view")
 
     assert graph_response.status_code == 200
+    assert graph_response.headers["x-cache"] == "BYPASS"
     assert graph_response.json()["center"]["id"] == str(asset.id)
     assert view_response.status_code == 200
     assert 'id="token"' in view_response.text

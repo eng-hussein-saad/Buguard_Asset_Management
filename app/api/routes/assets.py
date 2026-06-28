@@ -119,12 +119,17 @@ async def create_asset(
 )
 async def list_assets(
     params: Annotated[AssetListParams, Depends(list_params)],
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> PaginatedAssets:
     """List filtered and paginated assets for the current organization."""
-    return await tenant_assets.list_assets(session, current_user, params, cache_service)
+    payload = await tenant_assets.list_assets(
+        session, current_user, params, cache_service
+    )
+    response.headers["X-Cache"] = cache_service.last_status
+    return payload
 
 
 @router.post(
@@ -239,14 +244,17 @@ async def delete_asset(
 )
 async def get_asset_graph(
     asset_id: UUID,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> AssetGraph:
     """Return center, directly connected nodes, and directly connected edges."""
-    return await tenant_assets.get_asset_graph(
+    graph = await tenant_assets.get_asset_graph(
         session, current_user, asset_id, cache_service
     )
+    response.headers["X-Cache"] = cache_service.last_status
+    return graph
 
 
 def _graph_view_html(asset_id: UUID) -> str:
