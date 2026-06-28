@@ -66,7 +66,7 @@ class AnalysisReportResponse(BaseModel):
 
     summary: str
     risks: list[RiskEntry]
-    evidence_asset_ids: list[UUID]
+    evidence_asset_ids: list[UUID] = Field(default_factory=list, exclude=True)
     evidence: list[EvidenceAsset] = Field(default_factory=list)
     status: AnalysisStatus
     message: str | None = None

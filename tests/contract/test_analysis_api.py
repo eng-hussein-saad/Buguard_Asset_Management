@@ -51,6 +51,7 @@ async def test_analysis_report_route_response_shape(
             summary="ok",
             risks=[],
             evidence_asset_ids=[evidence_id],
+            evidence=[],
             status="completed",
         )
 
@@ -60,5 +61,7 @@ async def test_analysis_report_route_response_shape(
         response = await client.post("/analysis/report", json={"limit": 5})
 
     assert response.status_code == 200
-    assert response.json()["status"] == "completed"
-    assert response.json()["evidence_asset_ids"] == [str(evidence_id)]
+    body = response.json()
+    assert body["status"] == "completed"
+    assert "evidence_asset_ids" not in body
+    assert "message" not in body

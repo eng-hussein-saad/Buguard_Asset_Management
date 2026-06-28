@@ -35,6 +35,7 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 @router.post(
     "/report",
     response_model=AnalysisReportResponse,
+    response_model_exclude_none=True,
     summary="Generate a grounded organization-owned asset analysis report",
     responses=ERROR_RESPONSES,
 )

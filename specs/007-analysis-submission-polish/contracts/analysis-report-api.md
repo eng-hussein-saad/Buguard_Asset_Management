@@ -46,9 +46,21 @@ All fields are optional except authentication. `organization_id` is not accepted
       "evidence_asset_ids": ["00000000-0000-0000-0000-000000000001"]
     }
   ],
-  "evidence_asset_ids": ["00000000-0000-0000-0000-000000000001"],
-  "generated_at": "2026-06-28T12:00:00Z",
-  "message": null
+  "evidence": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "type": "certificate",
+      "value": "CN=api.example.com",
+      "status": "active",
+      "source": "assessment-sample",
+      "tags": ["tls"],
+      "metadata": {
+        "expires": "2026-07-15"
+      },
+      "certificate_lifecycle_status": "expiring_soon"
+    }
+  ],
+  "generated_at": "2026-06-28T12:00:00Z"
 }
 ```
 
@@ -59,8 +71,7 @@ All fields are optional except authentication. `organization_id` is not accepted
   "status": "no_data",
   "summary": "No matching assets were available for analysis.",
   "risks": [],
-  "evidence_asset_ids": [],
-  "generated_at": "2026-06-28T12:00:00Z",
+  "evidence": [],
   "message": "No matching assets were available for the requested filters."
 }
 ```

@@ -845,8 +845,9 @@ curl -i -X POST http://localhost:8000/analysis/report \
   -d '{"type":"certificate","certificate_lifecycle_status":"expiring_soon","limit":25}'
 ```
 
-Expected result: HTTP 200 with `status`, `summary`, `risks`,
-`evidence_asset_ids`, and selected `evidence`. Empty matches return `status:
+Expected result: HTTP 200 with `status`, `summary`, `risks`, and selected
+`evidence`. Risk entries cite `evidence_asset_ids`, while the full selected
+asset details appear once under `evidence`. Empty matches return `status:
 no_data` with no risks and no invented evidence. Missing provider settings
 return HTTP 503 with `analysis_unavailable`; provider failures return HTTP 502
 with `analysis_failed`; ungrounded provider output returns HTTP 502 with
