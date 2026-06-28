@@ -1,0 +1,264 @@
+openapi: 3.1.0
+info:
+  title: Buguard Asset Management Phase 5 Relationships and Graph API
+  version: 0.1.0
+  description: >
+    Contract for tenant-scoped asset relationships, duplicate prevention,
+    relationship listing, one-hop graph retrieval, and endpoint-driven graph
+    visualization.
+paths:
+  /relationships:
+    post:
+      summary: Create an organization-owned asset relationship
+      operationId: createRelationship
+      tags: [Relationships]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationshipCreate'
+      responses:
+        '201':
+          description: Relationship created under the authenticated organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relationship'
+        '400':
+          description: Invalid relationship payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: User role cannot create relationships.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Source or target asset is missing or outside the authenticated organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Relationship already exists for the organization, source, target, and type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: List organization-owned asset relationships
+      operationId: listRelationships
+      tags: [Relationships]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Relationships for the authenticated organization.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Relationship'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /assets/{asset_id}/graph:
+    get:
+      summary: Retrieve a one-hop graph centered on one organization-owned asset
+      operationId: getAssetGraph
+      tags: [Relationships]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: One-hop graph for the selected asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetGraph'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Center asset is missing or outside the authenticated organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /assets/{asset_id}/graph/view:
+    get:
+      summary: Render a simple endpoint-driven graph visualization
+      operationId: viewAssetGraph
+      tags: [Relationships]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Simple graph visualization shell that fetches the graph endpoint.
+          content:
+            text/html:
+              schema:
+                type: string
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    AssetId:
+      name: asset_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    AssetType:
+      type: string
+      enum: [domain, subdomain, ip_address, service, certificate, technology]
+    RelationshipType:
+      type: string
+      enum: [belongs_to, resolves_to, runs_on, covers, detected_on]
+    RelationshipCreate:
+      type: object
+      required: [source_asset_id, target_asset_id, relationship_type]
+      additionalProperties: false
+      properties:
+        source_asset_id:
+          type: string
+          format: uuid
+        target_asset_id:
+          type: string
+          format: uuid
+        relationship_type:
+          $ref: '#/components/schemas/RelationshipType'
+        metadata:
+          type: object
+          default: {}
+      description: organization_id is not accepted; ownership is derived from the authenticated user.
+    Relationship:
+      type: object
+      required:
+        - id
+        - source_asset_id
+        - target_asset_id
+        - relationship_type
+        - metadata
+        - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_asset_id:
+          type: string
+          format: uuid
+        target_asset_id:
+          type: string
+          format: uuid
+        relationship_type:
+          $ref: '#/components/schemas/RelationshipType'
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+    GraphAsset:
+      type: object
+      required: [id, type, value, label]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AssetType'
+        value:
+          type: string
+        label:
+          type: string
+    GraphEdge:
+      type: object
+      required: [id, source_asset_id, target_asset_id, relationship_type, label]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_asset_id:
+          type: string
+          format: uuid
+        target_asset_id:
+          type: string
+          format: uuid
+        relationship_type:
+          $ref: '#/components/schemas/RelationshipType'
+        label:
+          type: string
+    AssetGraph:
+      type: object
+      required: [center, nodes, edges]
+      additionalProperties: false
+      properties:
+        center:
+          $ref: '#/components/schemas/GraphAsset'
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphAsset'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+    ErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              examples: [ASSET_NOT_FOUND, DUPLICATE_RELATIONSHIP, authorization_failed]
+            message:
+              type: string
+            details:
+              type: object

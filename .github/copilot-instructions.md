@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/004-bulk-import-lifecycle/plan.md
+specs/005-asset-relationships-graph/plan.md
 <!-- SPECKIT END -->
