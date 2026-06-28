@@ -34,3 +34,5 @@
 - Validation completed on 2026-06-28. No remaining issues were found.
 - Revalidated after adding sample-shaped bulk import compatibility, relationship references, larger dataset handling, imperfect record reporting, and related success criteria.
 - Revalidated after clarifying that parent and covers are relationship types that must be supported and created during bulk import.
+- Revalidated after making analysis required and adding certificate lifecycle handling for expired and expiring-soon certificates.
+- Revalidated after adding shared certificate lifecycle classification from metadata.expires across import reporting, asset read/list responses, lifecycle filters, graph responses, documentation, examples, tests, and analysis.
