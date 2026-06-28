@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
@@ -154,7 +154,39 @@ def _filtered_query(
         query = query.where(Asset.source == params.source)
     if params.value_contains is not None:
         query = query.where(Asset.value.ilike(f"%{params.value_contains}%"))
+    if params.certificate_lifecycle_status is not None:
+        query = query.where(Asset.type == "certificate")
+        today = func.current_date()
+        expires_text = Asset.asset_metadata["expires"].astext
+        has_valid_date = expires_text.op("~")(r"^\d{4}-\d{2}-\d{2}")
+        expires = func.to_date(expires_text, "YYYY-MM-DD")
+        status = params.certificate_lifecycle_status.value
+        if status == "expired":
+            query = query.where(has_valid_date, expires < today)
+        elif status == "expiring_soon":
+            query = query.where(has_valid_date, expires >= today, expires <= today + 30)
+        elif status == "valid":
+            query = query.where(has_valid_date, expires > today + 30)
+        else:
+            query = query.where(
+                or_(
+                    ~Asset.asset_metadata.has_key("expires"),  # noqa: W601
+                    ~has_valid_date,
+                )
+            )
     return query
+
+
+async def select_analysis_evidence(
+    session: AsyncSession, organization_id: UUID, params: AssetListParams, limit: int
+) -> Sequence[Asset]:
+    """Return bounded organization-scoped evidence for analysis reports."""
+    result = await session.scalars(
+        _filtered_query(organization_id, params)
+        .order_by(Asset.updated_at.desc(), Asset.id.asc())
+        .limit(limit)
+    )
+    return result.all()
 
 
 async def count_for_organization(

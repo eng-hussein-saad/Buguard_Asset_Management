@@ -40,6 +40,20 @@ class Settings(BaseSettings):
     rate_limit_ai_analysis_attempts: int = Field(
         default=5, alias="RATE_LIMIT_AI_ANALYSIS_ATTEMPTS", ge=1
     )
+    analysis_provider: str | None = Field(default=None, alias="ANALYSIS_PROVIDER")
+    analysis_model: str | None = Field(default=None, alias="ANALYSIS_MODEL")
+    analysis_api_key: str | None = Field(default=None, alias="ANALYSIS_API_KEY")
+    analysis_base_url: str | None = Field(default=None, alias="ANALYSIS_BASE_URL")
+    analysis_http_referer: str | None = Field(
+        default=None, alias="ANALYSIS_HTTP_REFERER"
+    )
+    analysis_app_title: str | None = Field(default=None, alias="ANALYSIS_APP_TITLE")
+    analysis_timeout_seconds: int = Field(
+        default=30, alias="ANALYSIS_TIMEOUT_SECONDS", ge=1
+    )
+    analysis_evidence_limit: int = Field(
+        default=50, alias="ANALYSIS_EVIDENCE_LIMIT", ge=1, le=100
+    )
 
 
 def _sanitize_settings_error(error: ValidationError) -> str:

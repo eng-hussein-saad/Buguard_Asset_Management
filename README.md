@@ -4,18 +4,21 @@ The backend provides the FastAPI foundation for Buguard Asset Management,
 multi-tenant authentication, tenant-scoped asset CRUD, Phase 4 bulk import
 lifecycle handling, and Phase 5 asset relationships with one-hop graph
 retrieval, Phase 6 rate limits, organization-scoped cached reads, and CI
-quality checks. It includes
+quality checks, plus a Phase 7 LangChain-powered grounded analysis report,
+shared certificate lifecycle classification, and sample-shaped import
+relationships. It includes
 health checks, async PostgreSQL sessions, Alembic migrations, seeded evaluation
 tenants, login, refresh, logout, current-user auth, tenant ownership helpers,
 reusable RBAC checks, asset create/list/detail/update/delete endpoints, filters,
 sorting, pagination, normalization, idempotent asset import, partial import
 summaries, stale reactivation, relationship creation/listing, graph retrieval,
 a simple graph visualization, structured domain errors, fixed-window rate
-limits, and graceful cache fallback.
+limits, LangChain-backed `/analysis/report` responses, parent/covers import
+relationships, and graceful cache and analysis-provider fallback.
 
 Public registration, public organization creation, membership management,
-organization switching, multi-hop graph traversal, and AI analysis are
-out of scope for this phase.
+organization switching, multi-organization membership, live scanning,
+cross-organization reports, and multi-hop graph traversal are out of scope.
 
 ## Prerequisites
 
@@ -40,6 +43,14 @@ RATE_LIMIT_LOGIN_ATTEMPTS=5
 RATE_LIMIT_REFRESH_ATTEMPTS=10
 RATE_LIMIT_BULK_IMPORT_ATTEMPTS=10
 RATE_LIMIT_AI_ANALYSIS_ATTEMPTS=5
+ANALYSIS_PROVIDER=
+ANALYSIS_MODEL=
+ANALYSIS_API_KEY=
+ANALYSIS_BASE_URL=
+ANALYSIS_HTTP_REFERER=
+ANALYSIS_APP_TITLE=
+ANALYSIS_TIMEOUT_SECONDS=30
+ANALYSIS_EVIDENCE_LIMIT=50
 ```
 
 `DATABASE_URL` is required. If it is missing or malformed, the application fails
@@ -56,9 +67,26 @@ database-backed results. `CACHE_TTL_SECONDS` controls cached read lifetime.
 
 `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_LOGIN_ATTEMPTS`,
 `RATE_LIMIT_REFRESH_ATTEMPTS`, `RATE_LIMIT_BULK_IMPORT_ATTEMPTS`, and
-`RATE_LIMIT_AI_ANALYSIS_ATTEMPTS` define the fixed-window policy. The future AI
-analysis setting documents the future AI analysis policy for the later endpoint;
-Phase 6 does not add AI analysis behavior.
+`RATE_LIMIT_AI_ANALYSIS_ATTEMPTS` define the fixed-window policy.
+
+`ANALYSIS_PROVIDER`, `ANALYSIS_MODEL`, `ANALYSIS_API_KEY`, and
+`ANALYSIS_BASE_URL` configure the LangChain analysis provider. For OpenRouter's
+free NVIDIA Nemotron 3 Ultra model, use:
+
+```bash
+ANALYSIS_PROVIDER=openrouter
+ANALYSIS_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+ANALYSIS_API_KEY=<your_openrouter_key>
+ANALYSIS_BASE_URL=https://openrouter.ai/api/v1
+ANALYSIS_HTTP_REFERER=http://localhost:8000
+ANALYSIS_APP_TITLE=Buguard Asset Management
+```
+
+`ANALYSIS_HTTP_REFERER` and `ANALYSIS_APP_TITLE` are optional OpenRouter
+attribution headers. If the provider name or API key is absent, the API still
+starts and core asset workflows keep working; `/analysis/report` returns a
+structured `analysis_unavailable` response. `ANALYSIS_TIMEOUT_SECONDS` and
+`ANALYSIS_EVIDENCE_LIMIT` document the bounded provider input policy.
 
 ## Install
 
@@ -754,6 +782,82 @@ docker compose start redis
 Expected result: reads still return HTTP 200 with correct organization-scoped
 database results while Redis is stopped, with `X-Cache: BYPASS`.
 
+### Sample-Shaped Import
+
+The import endpoint also accepts evaluator sample records with import-local
+`id`, `parent`, and `covers` references. Relationship references are resolved
+only inside the authenticated import batch.
+
+```bash
+curl -i -X POST http://localhost:8000/assets/import \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"id":"a1","type":"domain","value":"example.com","source":"assessment-sample","tags":["external"],"metadata":{}},{"id":"a2","type":"subdomain","value":"api.example.com","source":"assessment-sample","tags":["api"],"metadata":{},"parent":"a1"},{"id":"a3","type":"certificate","value":"cert-api-example","source":"assessment-sample","tags":["tls"],"metadata":{"issuer":"Example CA","expires":"2026-07-15"},"covers":"a2"}]}'
+```
+
+Expected result: valid assets are created or refreshed, the subdomain gets a
+`parent` relationship to the domain, the certificate gets a `covers`
+relationship to the subdomain, malformed records are reported per record, and
+unresolved or unsafe references do not create relationships.
+
+### Certificate Lifecycle
+
+Certificate lifecycle status is derived from `metadata.expires`; it is not
+stored as a separate source of truth. Responses classify certificates as
+`expired`, `expiring_soon`, `valid`, or `unknown`.
+
+```bash
+curl -s "http://localhost:8000/assets?type=certificate&certificate_lifecycle_status=expired" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+
+curl -s "http://localhost:8000/assets?type=certificate&certificate_lifecycle_status=expiring_soon" \
+  -H "Authorization: Bearer $VIEWER_ACCESS_TOKEN"
+```
+
+The same classifier is used by asset detail responses, asset lists, graph
+certificate nodes, import reporting for malformed expiry values, and analysis
+evidence. Expiring soon means the expiry date is from today through the next 30
+calendar days, inclusive.
+
+Example certificate records:
+
+```json
+[
+  {"type": "certificate", "value": "expired-cert", "metadata": {"expires": "2020-01-01"}},
+  {"type": "certificate", "value": "soon-cert", "metadata": {"expires": "2026-07-15"}},
+  {"type": "certificate", "value": "valid-cert", "metadata": {"expires": "2027-01-01"}},
+  {"type": "certificate", "value": "missing-expiry", "metadata": {}},
+  {"type": "certificate", "value": "bad-expiry", "metadata": {"expires": "not-a-date"}}
+]
+```
+
+### Analysis Reports
+
+Authenticated users can request a grounded report from organization-owned
+evidence only. The endpoint selects real assets from PostgreSQL first, passes
+only that bounded evidence to LangChain, asks for structured output, and then
+validates every returned evidence ID before responding:
+
+```bash
+curl -i -X POST http://localhost:8000/analysis/report \
+  -H "Authorization: Bearer $ANALYST_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"certificate","certificate_lifecycle_status":"expiring_soon","limit":25}'
+```
+
+Expected result: HTTP 200 with `status`, `summary`, `risks`,
+`evidence_asset_ids`, and selected `evidence`. Empty matches return `status:
+no_data` with no risks and no invented evidence. Missing provider settings
+return HTTP 503 with `analysis_unavailable`; provider failures return HTTP 502
+with `analysis_failed`; ungrounded provider output returns HTTP 502 with
+`analysis_grounding_failed`. Responses must not include secrets, prompts,
+provider stack traces, or cross-organization details.
+
+The AI analysis route uses the `RATE_LIMIT_AI_ANALYSIS_ATTEMPTS` policy and the
+same authenticated caller identity pattern as other protected workflows. Tests
+mock the LangChain output so local and CI verification do not require a live
+model call.
+
 ### Tenant Isolation
 
 Log in as the other organization admin:
@@ -815,7 +919,7 @@ uv run pytest
 uv run mypy app
 ```
 
-These commands are the local quality gate for Phase 6. GitHub Actions runs the
+These commands are the local quality gate for the final submission. GitHub Actions runs the
 same locked dependency sync, Ruff lint, pytest suite, and mypy check on `push`
 and `pull_request`. To validate failure visibility, open a temporary change
 that breaks linting or a test, confirm the named workflow step fails, then
@@ -872,3 +976,38 @@ The Phase 6 rate-limit and cache contract lives at
 `specs/006-test-ci-rate-limits/contracts/test-ci-rate-limits-api.yaml` and adds
 structured HTTP 429 responses for login, refresh, and bulk import, plus
 cache-behavior documentation for asset list and graph reads.
+
+The Phase 7 contracts live under
+`specs/007-analysis-submission-polish/contracts/` and cover:
+
+```text
+POST /analysis/report
+GET /assets with certificate_lifecycle_status filters
+POST /assets/import with id, parent, and covers sample references
+```
+
+## Final Submission Readiness
+
+From a clean checkout:
+
+```bash
+uv sync --all-groups
+docker compose up -d db redis
+uv run alembic upgrade head
+uv run python scripts/seed.py
+uv run pytest
+uv run ruff check app tests
+uv run mypy app
+```
+
+Verify setup, seeded credential login, authenticated asset import, lifecycle
+filters, relationships, graph retrieval, rate-limit behavior, analysis report
+responses, and cache fallback. Known tradeoffs: live asset scanning is not
+implemented, public registration and organization creation are intentionally
+absent, users belong to one organization, organization switching is not
+implemented, reports are generated on request rather than stored as report
+history, and future AI analysis provider adapters can be added behind the same
+LangChain-style provider boundary and grounding checks. The documented typing
+gate is `uv run mypy app`; the stricter `uv run mypy app tests` command also
+checks older test fixtures and currently reports legacy test annotation debt
+outside the application package.

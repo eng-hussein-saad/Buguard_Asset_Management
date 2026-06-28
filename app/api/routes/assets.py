@@ -26,6 +26,7 @@ from app.schemas.assets import (
 )
 from app.services import tenant_assets
 from app.services.cache import CacheService
+from app.services.certificate_lifecycle import CertificateLifecycleStatus
 from app.services.rate_limits import (
     BULK_IMPORT,
     RateLimitService,
@@ -63,6 +64,9 @@ def list_params(
     tag: Annotated[str | None, Query(min_length=1)] = None,
     source: Annotated[str | None, Query(min_length=1)] = None,
     value_contains: Annotated[str | None, Query(min_length=1)] = None,
+    certificate_lifecycle_status: Annotated[
+        CertificateLifecycleStatus | None, Query()
+    ] = None,
     sort_by: AssetSortField = "created_at",
     sort_order: SortOrder = "desc",
     page: Annotated[int, Query(ge=1)] = 1,
@@ -75,6 +79,7 @@ def list_params(
         tag=tag,
         source=source,
         value_contains=value_contains,
+        certificate_lifecycle_status=certificate_lifecycle_status,
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,

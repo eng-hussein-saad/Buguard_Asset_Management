@@ -13,6 +13,10 @@ from app.models.asset import (
     AssetType,
     RelationshipType,
 )
+from app.services.certificate_lifecycle import (
+    CertificateLifecycleStatus,
+    lifecycle_value,
+)
 
 AssetSortField = Literal[
     "value", "type", "status", "first_seen", "last_seen", "created_at"
@@ -71,11 +75,14 @@ class AssetImportRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: AssetType
+    id: str | None = Field(default=None, min_length=1)
     value: str = Field(min_length=1)
     status: AssetStatus = AssetStatus.ACTIVE
     source: str | None = None
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
+    parent: str | None = Field(default=None, min_length=1)
+    covers: str | None = Field(default=None, min_length=1)
     first_seen: datetime | None = Field(
         default=None, description="Ignored; assigned by the server."
     )
@@ -106,6 +113,7 @@ class AssetImportSummary(BaseModel):
     updated: int = Field(ge=0)
     failed: int = Field(ge=0)
     errors: list[AssetImportError] = Field(default_factory=list)
+    relationships_created: int = Field(default=0, ge=0)
 
 
 class AssetRead(BaseModel):
@@ -120,12 +128,19 @@ class AssetRead(BaseModel):
     source: str | None
     tags: list[str]
     metadata: dict[str, Any]
+    certificate_lifecycle_status: CertificateLifecycleStatus | None = None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
     def from_model(cls, asset: Asset) -> AssetRead:
         """Build an API response from the SQLAlchemy asset model."""
+        metadata = dict(asset.asset_metadata or {})
+        lifecycle_status = (
+            CertificateLifecycleStatus(lifecycle_value(metadata))
+            if asset.type == AssetType.CERTIFICATE.value
+            else None
+        )
         return cls(
             id=asset.id,
             type=AssetType(asset.type),
@@ -135,7 +150,8 @@ class AssetRead(BaseModel):
             last_seen=asset.last_seen,
             source=asset.source,
             tags=list(asset.tags or []),
-            metadata=dict(asset.asset_metadata or {}),
+            metadata=metadata,
+            certificate_lifecycle_status=lifecycle_status,
             created_at=asset.created_at,
             updated_at=asset.updated_at,
         )
@@ -188,15 +204,23 @@ class GraphAsset(BaseModel):
     type: AssetType
     value: str
     label: str
+    certificate_lifecycle_status: CertificateLifecycleStatus | None = None
 
     @classmethod
     def from_model(cls, asset: Asset) -> GraphAsset:
         """Build a graph node label from an asset model."""
+        metadata = dict(asset.asset_metadata or {})
+        lifecycle_status = (
+            CertificateLifecycleStatus(lifecycle_value(metadata))
+            if asset.type == AssetType.CERTIFICATE.value
+            else None
+        )
         return cls(
             id=asset.id,
             type=AssetType(asset.type),
             value=asset.value,
             label=asset.value,
+            certificate_lifecycle_status=lifecycle_status,
         )
 
 
@@ -238,6 +262,7 @@ class AssetListParams(BaseModel):
     tag: str | None = Field(default=None, min_length=1)
     source: str | None = Field(default=None, min_length=1)
     value_contains: str | None = Field(default=None, min_length=1)
+    certificate_lifecycle_status: CertificateLifecycleStatus | None = None
     sort_by: AssetSortField = "created_at"
     sort_order: SortOrder = "desc"
     page: int = Field(default=1, ge=1)

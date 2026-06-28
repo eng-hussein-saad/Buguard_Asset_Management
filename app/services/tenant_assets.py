@@ -11,7 +11,13 @@ from app.core.errors import (
     DuplicateRelationshipError,
     NotFoundError,
 )
-from app.models.asset import Asset, AssetRelationship, AssetStatus, AssetType
+from app.models.asset import (
+    Asset,
+    AssetRelationship,
+    AssetStatus,
+    AssetType,
+    RelationshipType,
+)
 from app.models.user import User
 from app.repositories import assets as asset_repository
 from app.repositories import relationships as relationship_repository
@@ -32,6 +38,7 @@ from app.schemas.assets import (
     RelationshipRead,
 )
 from app.services.cache import CacheService
+from app.services.certificate_lifecycle import parse_certificate_expiry
 from app.services.rbac import Permission, require_permission
 
 
@@ -99,11 +106,14 @@ def validate_import_record(
     """Validate one raw import record without trusting ownership or timestamps."""
     allowed_fields = {
         "type",
+        "id",
         "value",
         "status",
         "source",
         "tags",
         "metadata",
+        "parent",
+        "covers",
         "first_seen",
         "last_seen",
     }
@@ -145,18 +155,69 @@ def validate_import_record(
     metadata = raw.get("metadata", {})
     if not isinstance(metadata, dict):
         return None, _reject_record(index, "Asset metadata must be an object.")
+    import_id = raw.get("id")
+    if import_id is not None and (
+        not isinstance(import_id, str) or not import_id.strip()
+    ):
+        return None, _reject_record(index, "Import-local id must be a string.")
+    parent = raw.get("parent")
+    if parent is not None and (not isinstance(parent, str) or not parent.strip()):
+        return None, _reject_record(index, "Parent reference must be a string.")
+    covers = raw.get("covers")
+    if covers is not None and (not isinstance(covers, str) or not covers.strip()):
+        return None, _reject_record(index, "Covers reference must be a string.")
 
     return (
         {
+            "import_id": import_id.strip() if isinstance(import_id, str) else None,
             "type": asset_type,
             "value": normalize_asset_value(asset_type, value),
             "status": status_value,
             "source": source,
             "tags": tags,
             "metadata": metadata,
+            "parent": parent.strip() if isinstance(parent, str) else None,
+            "covers": covers.strip() if isinstance(covers, str) else None,
         },
         None,
     )
+
+
+def _certificate_expiry_error(
+    index: int, record: dict[str, Any]
+) -> AssetImportError | None:
+    """Report malformed certificate expiry metadata without rejecting the record."""
+    if record["type"] != AssetType.CERTIFICATE.value:
+        return None
+    metadata = record["metadata"]
+    if "expires" in metadata and parse_certificate_expiry(metadata["expires"]) is None:
+        return _reject_record(index, "Certificate metadata.expires is malformed.")
+    return None
+
+
+async def _create_import_relationship(
+    session: AsyncSession,
+    organization_id: UUID,
+    *,
+    source: Asset,
+    target: Asset,
+    relationship_type: RelationshipType,
+) -> bool:
+    """Create an import relationship idempotently inside one organization."""
+    duplicate = await relationship_repository.get_duplicate_for_organization(
+        session, organization_id, source.id, target.id, relationship_type.value
+    )
+    if duplicate is not None:
+        return False
+    await relationship_repository.create_relationship(
+        session,
+        organization_id,
+        source.id,
+        target.id,
+        relationship_type.value,
+        {"source": "import"},
+    )
+    return True
 
 
 def _normalized_update(existing: Asset, payload: AssetUpdate) -> dict[str, object]:
@@ -330,6 +391,10 @@ async def import_assets(
     require_permission(current_user.role, Permission.BULK_IMPORT)
     summary = AssetImportSummary(created=0, updated=0, failed=0, errors=[])
 
+    processed_by_import_id: dict[str, Asset] = {}
+    duplicate_import_ids: set[str] = set()
+    relationship_requests: list[tuple[int, str, str, RelationshipType]] = []
+
     try:
         for index, raw_record in enumerate(payload.items):
             record, error = validate_import_record(index, dict(raw_record))
@@ -337,8 +402,20 @@ async def import_assets(
                 summary.failed += 1
                 summary.errors.append(error or _reject_record(index, "Invalid record."))
                 continue
+            expiry_error = _certificate_expiry_error(index, record)
+            if expiry_error is not None:
+                summary.failed += 1
+                summary.errors.append(expiry_error)
+            import_id = record["import_id"]
+            if import_id is not None and import_id in processed_by_import_id:
+                duplicate_import_ids.add(str(import_id))
+                summary.failed += 1
+                summary.errors.append(
+                    _reject_record(index, "Duplicate import-local id.")
+                )
+                continue
 
-            _, created = await observe_asset(
+            asset, created = await observe_asset(
                 session,
                 current_user.organization_id,
                 asset_type=str(record["type"]),
@@ -350,8 +427,68 @@ async def import_assets(
             )
             if created:
                 summary.created += 1
+            else:
+                summary.updated += 1
+            if import_id is not None:
+                processed_by_import_id[str(import_id)] = asset
+                if record["parent"] is not None:
+                    relationship_requests.append(
+                        (
+                            index,
+                            str(import_id),
+                            str(record["parent"]),
+                            RelationshipType.PARENT,
+                        )
+                    )
+                if record["covers"] is not None:
+                    relationship_requests.append(
+                        (
+                            index,
+                            str(import_id),
+                            str(record["covers"]),
+                            RelationshipType.COVERS,
+                        )
+                    )
+        for index, source_ref, target_ref, relationship_type in relationship_requests:
+            source = processed_by_import_id.get(source_ref)
+            target = processed_by_import_id.get(target_ref)
+            if (
+                source is None
+                or target is None
+                or source_ref in duplicate_import_ids
+                or target_ref in duplicate_import_ids
+            ):
+                summary.failed += 1
+                summary.errors.append(
+                    _reject_record(
+                        index,
+                        f"Unresolved {relationship_type.value} reference.",
+                    )
+                )
                 continue
-            summary.updated += 1
+            if relationship_type == RelationshipType.PARENT and not (
+                source.type == AssetType.SUBDOMAIN.value
+                and target.type == AssetType.DOMAIN.value
+            ):
+                summary.failed += 1
+                summary.errors.append(_reject_record(index, "Unsafe parent reference."))
+                continue
+            if relationship_type == RelationshipType.COVERS and not (
+                source.type == AssetType.CERTIFICATE.value
+                and target.type == AssetType.SUBDOMAIN.value
+            ):
+                summary.failed += 1
+                summary.errors.append(_reject_record(index, "Unsafe covers reference."))
+                continue
+            created_relationship = await _create_import_relationship(
+                session,
+                current_user.organization_id,
+                source=source,
+                target=target,
+                relationship_type=relationship_type,
+            )
+            if created_relationship:
+                summary.relationships_created += 1
         if summary.created or summary.updated:
             await session.commit()
     except IntegrityError as exc:

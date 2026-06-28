@@ -40,6 +40,7 @@ class AssetStatus(StrEnum):
 
 class RelationshipType(StrEnum):
     BELONGS_TO = "belongs_to"
+    PARENT = "parent"
     RESOLVES_TO = "resolves_to"
     RUNS_ON = "runs_on"
     COVERS = "covers"
@@ -103,7 +104,7 @@ class AssetRelationship(UUIDPrimaryKeyMixin, Base):
             name="uq_relationships_org_source_target_type",
         ),
         CheckConstraint(
-            "relationship_type IN ('belongs_to', 'resolves_to', 'runs_on', "
+            "relationship_type IN ('belongs_to', 'parent', 'resolves_to', 'runs_on', "
             "'covers', 'detected_on')",
             name="ck_relationships_type",
         ),

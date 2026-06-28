@@ -36,3 +36,19 @@ def test_ci_commands_match_documented_local_commands() -> None:
         assert command in workflow
         assert command in readme
         assert command in quickstart
+
+
+def test_phase7_test_modules_are_discoverable_by_pytest() -> None:
+    """Verify Phase 7 tests live under the documented pytest test tree."""
+    expected = (
+        Path("tests/contract/test_analysis_api.py"),
+        Path("tests/integration/test_analysis_report.py"),
+        Path("tests/integration/test_asset_certificate_lifecycle.py"),
+        Path("tests/integration/test_asset_import_sample_shape.py"),
+        Path("tests/integration/test_submission_documentation.py"),
+        Path("tests/unit/test_analysis_provider.py"),
+        Path("tests/unit/test_certificate_lifecycle.py"),
+    )
+
+    for path in expected:
+        assert path.exists()

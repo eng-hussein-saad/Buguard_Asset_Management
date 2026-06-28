@@ -120,3 +120,36 @@ class RateLimitExceededError(AppError):
                 "retry_after_seconds": retry_after_seconds,
             },
         )
+
+
+class AnalysisUnavailableError(AppError):
+    """Raised when analysis is configured as unavailable for this runtime."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "analysis_unavailable",
+            "Analysis provider is not configured.",
+        )
+
+
+class AnalysisFailedError(AppError):
+    """Raised when a provider call fails without exposing provider internals."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_502_BAD_GATEWAY,
+            "analysis_failed",
+            "Analysis provider failed to generate a report.",
+        )
+
+
+class AnalysisGroundingError(AppError):
+    """Raised when provider output references assets outside selected evidence."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_502_BAD_GATEWAY,
+            "analysis_grounding_failed",
+            "Analysis provider returned ungrounded evidence.",
+        )

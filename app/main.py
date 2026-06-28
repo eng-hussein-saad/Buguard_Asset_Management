@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.api.routes.analysis import router as analysis_router
 from app.api.routes.assets import relationships_router
 from app.api.routes.assets import router as assets_router
 from app.api.routes.auth import router as auth_router
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.add_exception_handler(AppError, app_error_handler)
     application.add_exception_handler(RequestValidationError, validation_error_handler)
+    application.include_router(analysis_router)
     application.include_router(auth_router)
     application.include_router(assets_router)
     application.include_router(relationships_router)
@@ -61,4 +63,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
-

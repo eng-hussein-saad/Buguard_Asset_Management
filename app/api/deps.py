@@ -12,6 +12,11 @@ from app.core.security import decode_access_token
 from app.db.session import get_async_session
 from app.models.user import User
 from app.repositories.users import get_by_id
+from app.services.analysis import (
+    AnalysisProvider,
+    ConfiguredAnalysisProvider,
+    UnavailableAnalysisProvider,
+)
 from app.services.cache import CacheService
 from app.services.rate_limits import RateLimitService
 from app.services.rbac import Permission, require_permission
@@ -100,3 +105,20 @@ async def get_rate_limiter(
 ) -> RateLimitService:
     """Create the request rate-limit helper with optional external storage."""
     return RateLimitService(settings, cache_client)
+
+
+async def get_analysis_provider(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> AnalysisProvider:
+    """Return a configured provider or a safe unavailable provider."""
+    if not settings.analysis_provider or not settings.analysis_api_key:
+        return UnavailableAnalysisProvider()
+    return ConfiguredAnalysisProvider(
+        settings.analysis_provider,
+        settings.analysis_model,
+        settings.analysis_api_key,
+        settings.analysis_timeout_seconds,
+        base_url=settings.analysis_base_url,
+        http_referer=settings.analysis_http_referer,
+        app_title=settings.analysis_app_title,
+    )
