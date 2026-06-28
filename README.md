@@ -911,6 +911,8 @@ git push
 
 Expected result: GitHub Actions runs the `Quality` workflow on `push` and
 `pull_request`, syncs locked dependencies, then runs Ruff, pytest, and mypy.
+The workflow is defined in `.github/workflows/quality.yml`, and each run can be
+reviewed from the repository's Actions tab in GitHub.
 
 ## Tenant Isolation and Roles
 
@@ -1005,29 +1007,3 @@ POST /analysis/report
 GET /assets with certificate_lifecycle_status filters
 POST /assets/import with id, parent, and covers sample references
 ```
-
-## Final Submission Readiness
-
-From a clean checkout:
-
-```bash
-uv sync --all-groups
-docker compose up -d db redis
-uv run alembic upgrade head
-uv run python scripts/seed.py
-uv run pytest
-uv run ruff check app tests
-uv run mypy app
-```
-
-Verify setup, seeded credential login, authenticated asset import, lifecycle
-filters, relationships, graph retrieval, rate-limit behavior, analysis report
-responses, and cache fallback. Known tradeoffs: live asset scanning is not
-implemented, public registration and organization creation are intentionally
-absent, users belong to one organization, organization switching is not
-implemented, reports are generated on request rather than stored as report
-history, and future AI analysis provider adapters can be added behind the same
-LangChain-style provider boundary and grounding checks. The documented typing
-gate is `uv run mypy app`; the stricter `uv run mypy app tests` command also
-checks older test fixtures and currently reports legacy test annotation debt
-outside the application package.
