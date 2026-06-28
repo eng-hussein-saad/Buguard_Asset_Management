@@ -8,6 +8,13 @@
 
 **Input**: User description: "Read PLAN.md and create a specification for phase 6 ONLY."
 
+## Clarifications
+
+### Session 2026-06-28
+
+- Q: Should Phase 6 treat organization-scoped caching as required, optional, or deferred? → A: Caching is required in Phase 6 for organization-scoped asset list and graph reads.
+- Q: What should “per effective caller” mean for Phase 6 rate limiting? → A: Login uses username plus client IP; refresh and import use authenticated user plus organization.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Verify Core Asset Management Behavior (Priority: P1)
@@ -133,6 +140,7 @@ As an evaluator, I need clear notes for running tests, understanding continuous 
 - **FR-020**: Rate-limited requests MUST return a structured error response that clearly communicates the request was rate-limited.
 - **FR-021**: Rate limiting MUST NOT accept or trust client-supplied organization ownership for tenant or caller identity.
 - **FR-022**: Rate limiting MUST continue to allow normal authenticated and unauthenticated behavior below the documented thresholds.
+- **FR-031**: For rate limiting, login effective caller identity MUST be based on attempted username plus client network identity; refresh and bulk import effective caller identity MUST be based on authenticated user plus authenticated organization.
 - **FR-023**: System MUST cache organization-scoped asset listing and organization-scoped asset graph retrieval.
 - **FR-024**: Cache identity MUST include the authenticated organization and all user-visible query inputs that affect the response.
 - **FR-025**: Cached results MUST never be shared across organizations.
@@ -147,7 +155,7 @@ As an evaluator, I need clear notes for running tests, understanding continuous 
 - **Automated Test Suite**: The collection of repeatable checks that validates application health, authentication, tenant isolation, RBAC, asset workflows, imports, relationships, graphs, structured errors, and rate limiting.
 - **Seeded Test User**: A predefined user assigned to one organization and one role, used for local and automated verification without public registration.
 - **Continuous Quality Workflow**: The repository-level process that installs dependencies, runs linting, runs tests, and reports pass or fail status on pushed and proposed changes.
-- **Rate Limit Rule**: A threshold for an abuse-prone operation, including the protected operation, allowed request count, time window, caller identity, and structured rejection behavior.
+- **Rate Limit Rule**: A threshold for an abuse-prone operation, including the protected operation, allowed request count, time window, effective caller identity, and structured rejection behavior.
 - **Rate-Limit Violation**: A rejected request caused by exceeding a rate limit within the active time window.
 - **Cache Entry**: A stored read result for an organization-scoped asset list or graph response, identified by organization scope and request inputs and invalidated after relevant writes.
 
