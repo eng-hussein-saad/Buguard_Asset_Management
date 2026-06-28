@@ -14,6 +14,12 @@
 
 **Amendment**: Certificate lifecycle handling must be shared across import, asset views, filtering, graph display, documentation, examples, tests, and analysis. Certificate `metadata.expires` remains the source of truth, while derived lifecycle status is computed from that value.
 
+## Clarifications
+
+### Session 2026-06-28
+
+- Q: Which availability behavior should Phase 7 require for `/analysis/report`? -> A: Required endpoint with configured analysis provider; missing/unavailable provider returns structured unavailable response.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Generate Grounded Inventory Risk Reports (Priority: P1)
@@ -43,8 +49,8 @@ As an evaluator or maintainer, I need required analysis setup to be documented a
 
 **Acceptance Scenarios**:
 
-1. **Given** required analysis configuration is missing, **When** an evaluator follows setup or verification instructions, **Then** the missing configuration is clearly identifiable from documented setup requirements.
-2. **Given** the analysis service cannot complete a report, **When** an authenticated user requests a report, **Then** the system returns a clear structured failure and does not return partial, invented, or cross-tenant data.
+1. **Given** required analysis configuration is missing, **When** an evaluator follows setup or verification instructions, **Then** the missing configuration is clearly identifiable from documented setup requirements and authenticated analysis requests return a structured unavailable response.
+2. **Given** the configured analysis provider cannot complete a report, **When** an authenticated user requests a report, **Then** the system returns a clear structured unavailable or failure response and does not return partial, invented, or cross-tenant data.
 3. **Given** normal asset workflows are used while analysis is unavailable, **When** users list, import, update, or relate assets, **Then** those workflows continue to behave normally.
 
 ---
@@ -161,8 +167,8 @@ As an evaluator, I need certificate lifecycle status to appear in imported resul
 - **FR-006**: Analysis report responses MUST include a concise summary, a list of risks where applicable, and the asset IDs used as evidence.
 - **FR-007**: Each risk entry that refers to a specific asset MUST include the asset ID that supports the risk.
 - **FR-008**: When no assets match the requested filters, the report response MUST clearly state that no matching assets were available and return an empty evidence list.
-- **FR-009**: Analysis configuration required for report generation MUST be documented with safe placeholder values.
-- **FR-010**: Analysis failures caused by unavailable analysis services MUST return clear structured messages without exposing secrets or internal details.
+- **FR-009**: Analysis configuration required for successful report generation MUST be documented with safe placeholder values.
+- **FR-010**: The analysis report endpoint MUST exist for Phase 7, and missing, unavailable, or failing analysis provider configuration MUST return a clear structured unavailable or failure response without exposing secrets, internal details, partial reports, invented data, or cross-tenant report data.
 - **FR-011**: Missing or failing analysis services MUST NOT prevent core project startup, authentication, asset workflows, imports, relationship workflows, graph reads, or tests from running.
 - **FR-012**: Analysis reports MUST evaluate certificate lifecycle expiry dates for certificate assets included in the report input set.
 - **FR-013**: Analysis reports MUST classify certificates with expiry dates earlier than the evaluation date as expired.
@@ -271,7 +277,7 @@ As an evaluator, I need certificate lifecycle status to appear in imported resul
 - Phase 5 has already established relationship management, relationship listing, graph retrieval, and graph visualization usage if implemented.
 - Phase 6 has already established comprehensive tests, continuous quality checks, rate limiting, organization-scoped caching, and related documentation.
 - Phase 7 is limited to the required grounded analysis report, certificate lifecycle risk handling, sample-shaped bulk import compatibility, final README, example environment updates, clean-start verification instructions, and final submission polish.
-- The analysis feature is required for final submission and must satisfy all tenant isolation, grounding, certificate lifecycle, documentation, graceful failure, and test requirements in this specification.
+- The analysis report endpoint is required for final submission; successful report generation depends on documented analysis provider configuration, and missing or unavailable providers return structured unavailable responses.
 - Certificate metadata.expires remains the source of truth for certificate lifecycle dates; lifecycle_status is derived for convenience and consistency.
 - Expiring soon means a certificate expiry date from the evaluation date through the next 30 calendar days.
 - The supplied import sample is illustrative; the real assessment dataset may be larger and may include imperfect records that require partial success reporting.
