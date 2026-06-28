@@ -42,13 +42,13 @@
 - [ ] T011 Add analysis dependency provider that can be unavailable without breaking application startup in app/api/deps.py
 - [ ] T012 Register analysis router in app/main.py
 - [ ] T013 Add AI analysis rate-limit constant and policy wiring using existing Phase 6 rate-limit patterns in app/services/rate_limits.py
-- [ ] T014 Add parent relationship type to RelationshipType and relationship check constraint in app/models/asset.py
-- [ ] T015 Create Alembic migration for parent relationship type constraint updates in alembic/versions/003_phase7_parent_relationship.py
+- [ ] T014 Add parent and covers relationship types to RelationshipType and relationship check constraint in app/models/asset.py
+- [ ] T015 Create Alembic migration for parent and covers relationship type constraint updates in alembic/versions/003_phase7_parent_relationship.py
 - [ ] T016 [P] Add analysis schemas for filters, evidence assets, risks, completed/no-data reports, and structured statuses in app/schemas/analysis.py
 - [ ] T017 [P] Add certificate lifecycle status type and parser helpers in app/services/certificate_lifecycle.py
 - [ ] T018 [P] Add asset schema fields for certificate_lifecycle_status and sample import references in app/schemas/assets.py
 - [ ] T019 Update asset cache key serialization to include certificate lifecycle filters in app/services/cache.py
-- [ ] T020 Add provider interface, unavailable provider, fake-test seams, and output validation skeleton in app/services/analysis.py
+- [ ] T020 Add provider interface, configured analysis provider implementation, unavailable provider, fake-test seams, and output validation skeleton in app/services/analysis.py
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel.
 
