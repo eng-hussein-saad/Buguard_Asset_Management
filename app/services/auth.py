@@ -11,7 +11,6 @@ from app.core.security import (
     create_access_token,
     hash_refresh_token,
     verify_password,
-    verify_refresh_token,
 )
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
@@ -35,7 +34,7 @@ async def issue_token_pair(
     await auth_repository.create_refresh_token_record(
         session,
         user.id,
-        hash_refresh_token(raw_refresh_token),
+        hash_refresh_token(raw_refresh_token, active_settings),
         expires_at,
     )
     access_token = create_access_token(
@@ -63,11 +62,11 @@ async def authenticate(
 async def _find_refresh_record(
     session: AsyncSession, raw_refresh_token: str
 ) -> RefreshToken | None:
-    """Find the unrevoked refresh-token record matching a raw token."""
-    for candidate in await auth_repository.list_unrevoked_refresh_tokens(session):
-        if verify_refresh_token(raw_refresh_token, candidate.token_hash):
-            return candidate
-    return None
+    """Find an unrevoked refresh-token record by its keyed digest."""
+    token_hash = hash_refresh_token(raw_refresh_token)
+    return await auth_repository.get_unrevoked_refresh_token_by_hash(
+        session, token_hash
+    )
 
 
 async def refresh_token_user(session: AsyncSession, raw_refresh_token: str) -> User:

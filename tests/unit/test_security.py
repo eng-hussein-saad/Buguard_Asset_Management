@@ -8,7 +8,6 @@ from app.core.security import (
     hash_password,
     hash_refresh_token,
     verify_password,
-    verify_refresh_token,
 )
 
 
@@ -21,11 +20,16 @@ def test_password_hashing_does_not_store_raw_password() -> None:
 
 
 def test_refresh_token_hashing_does_not_store_raw_token() -> None:
-    token_hash = hash_refresh_token("raw-refresh-token")
+    settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/buguard",
+        JWT_SECRET_KEY="test-secret",
+    )
+    token_hash = hash_refresh_token("raw-refresh-token", settings)
 
     assert token_hash != "raw-refresh-token"
-    assert verify_refresh_token("raw-refresh-token", token_hash)
-    assert not verify_refresh_token("different-token", token_hash)
+    assert token_hash.startswith("hmac-sha256:")
+    assert token_hash == hash_refresh_token("raw-refresh-token", settings)
+    assert token_hash != hash_refresh_token("different-token", settings)
 
 
 def test_expired_access_token_is_rejected() -> None:

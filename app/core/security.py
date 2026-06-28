@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
@@ -68,10 +70,12 @@ def decode_access_token(
     return payload
 
 
-def hash_refresh_token(token: str) -> str:
-    return cast(str, password_context.hash(token))
-
-
-def verify_refresh_token(token: str, token_hash: str) -> bool:
-    return cast(bool, password_context.verify(token, token_hash))
-
+def hash_refresh_token(token: str, settings: Settings | None = None) -> str:
+    """Create a keyed digest for direct lookup of high-entropy refresh tokens."""
+    active_settings = settings or get_settings()
+    digest = hmac.new(
+        active_settings.jwt_secret_key.encode(),
+        token.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"hmac-sha256:{digest}"

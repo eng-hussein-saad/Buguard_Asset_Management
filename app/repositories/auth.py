@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -31,15 +32,21 @@ async def create_refresh_token_record(
     return token
 
 
-async def list_unrevoked_refresh_tokens(
-    session: AsyncSession,
-) -> list[RefreshToken]:
-    result = await session.scalars(
-        select(RefreshToken)
-        .options(selectinload(RefreshToken.user))
-        .where(RefreshToken.revoked_at.is_(None))
+async def get_unrevoked_refresh_token_by_hash(
+    session: AsyncSession, token_hash: str
+) -> RefreshToken | None:
+    """Return one unrevoked refresh token by its indexed digest."""
+    return cast(
+        RefreshToken | None,
+        await session.scalar(
+            select(RefreshToken)
+            .options(selectinload(RefreshToken.user))
+            .where(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.revoked_at.is_(None),
+            )
+        ),
     )
-    return list(result)
 
 
 async def revoke_refresh_token(session: AsyncSession, token: RefreshToken) -> None:

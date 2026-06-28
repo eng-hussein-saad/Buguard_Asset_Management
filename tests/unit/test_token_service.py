@@ -10,13 +10,13 @@ from app.services import auth as auth_service
 
 @pytest.mark.asyncio
 async def test_refresh_rejects_unknown_token(monkeypatch) -> None:
-    async def empty_tokens(session):
-        return []
+    async def missing_token(session, token_hash):
+        return None
 
     monkeypatch.setattr(
         auth_service.auth_repository,
-        "list_unrevoked_refresh_tokens",
-        empty_tokens,
+        "get_unrevoked_refresh_token_by_hash",
+        missing_token,
     )
 
     with pytest.raises(AuthenticationError):
