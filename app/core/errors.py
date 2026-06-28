@@ -95,3 +95,14 @@ class DuplicateAssetError(AppError):
             "Asset already exists.",
         )
 
+
+class DuplicateRelationshipError(AppError):
+    """Raised when a relationship already exists in an organization."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            status.HTTP_409_CONFLICT,
+            "DUPLICATE_RELATIONSHIP",
+            "Relationship already exists.",
+        )
+

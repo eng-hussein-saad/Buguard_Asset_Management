@@ -2,6 +2,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
@@ -9,6 +10,7 @@ from app.models.asset import AssetStatus, AssetType
 from app.models.user import User
 from app.schemas.assets import (
     AssetCreate,
+    AssetGraph,
     AssetImportBatch,
     AssetImportSummary,
     AssetListParams,
@@ -17,11 +19,15 @@ from app.schemas.assets import (
     AssetUpdate,
     ErrorResponse,
     PaginatedAssets,
+    RelationshipCreate,
+    RelationshipList,
+    RelationshipRead,
     SortOrder,
 )
 from app.services import tenant_assets
 
 router = APIRouter(prefix="/assets", tags=["Assets"])
+relationships_router = APIRouter(prefix="/relationships", tags=["Relationships"])
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {"model": ErrorResponse, "description": "Invalid request."},
@@ -29,6 +35,17 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     403: {"model": ErrorResponse, "description": "User role cannot perform action."},
     404: {"model": ErrorResponse, "description": "Asset was not found."},
     409: {"model": ErrorResponse, "description": "Asset already exists."},
+}
+
+RELATIONSHIP_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"model": ErrorResponse, "description": "Invalid relationship payload."},
+    401: {"model": ErrorResponse, "description": "Missing or invalid access token."},
+    403: {
+        "model": ErrorResponse,
+        "description": "User role cannot create relationships.",
+    },
+    404: {"model": ErrorResponse, "description": "Asset was not found."},
+    409: {"model": ErrorResponse, "description": "Relationship already exists."},
 }
 
 
@@ -183,3 +200,181 @@ async def delete_asset(
     """Permanently delete an asset from the authenticated organization."""
     await tenant_assets.delete_asset(session, current_user, asset_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{asset_id}/graph",
+    response_model=AssetGraph,
+    summary="Retrieve a one-hop graph centered on one organization-owned asset",
+    responses={
+        code: response
+        for code, response in RELATIONSHIP_ERROR_RESPONSES.items()
+        if code in {401, 404}
+    },
+)
+async def get_asset_graph(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetGraph:
+    """Return center, directly connected nodes, and directly connected edges."""
+    return await tenant_assets.get_asset_graph(session, current_user, asset_id)
+
+
+def _graph_view_html(asset_id: UUID) -> str:
+    """Render the simple endpoint-driven graph visualization shell."""
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buguard Asset Graph</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #111827; }}
+    main {{ max-width: 960px; margin: 0 auto; }}
+    svg {{ width: 100%; height: 520px; border: 1px solid #d1d5db; }}
+    .node {{ fill: #0f766e; }}
+    .edge {{ stroke: #64748b; stroke-width: 2; }}
+    text {{ font-size: 13px; fill: #111827; }}
+    pre {{ background: #f3f4f6; padding: 1rem; overflow: auto; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Asset Graph</h1>
+    <p id="status">Loading graph for {asset_id}...</p>
+    <svg id="graph" role="img" aria-label="Asset relationship graph"></svg>
+    <pre id="error" hidden></pre>
+  </main>
+  <script>
+    const assetId = "{asset_id}";
+    const graph = document.getElementById("graph");
+    const statusEl = document.getElementById("status");
+    const errorEl = document.getElementById("error");
+
+    function draw(payload) {{
+      graph.innerHTML = "";
+      const width = graph.clientWidth || 900;
+      const height = graph.clientHeight || 520;
+      const cx = width / 2;
+      const cy = height / 2;
+      const radius = Math.min(width, height) / 3;
+      const positions = new Map();
+      payload.nodes.forEach((node, index) => {{
+        if (node.id === payload.center.id) {{
+          positions.set(node.id, [cx, cy]);
+          return;
+        }}
+        const divisor = Math.max(payload.nodes.length - 1, 1);
+        const angle = (2 * Math.PI * index) / divisor;
+        const x = cx + radius * Math.cos(angle);
+        const y = cy + radius * Math.sin(angle);
+        positions.set(node.id, [x, y]);
+      }});
+      payload.edges.forEach((edge) => {{
+        const source = positions.get(edge.source_asset_id);
+        const target = positions.get(edge.target_asset_id);
+        if (!source || !target) return;
+        const midX = (source[0] + target[0]) / 2;
+        const midY = (source[1] + target[1]) / 2 - 8;
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("class", "edge");
+        line.setAttribute("x1", source[0]);
+        line.setAttribute("y1", source[1]);
+        line.setAttribute("x2", target[0]);
+        line.setAttribute("y2", target[1]);
+        graph.appendChild(line);
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", midX);
+        label.setAttribute("y", midY);
+        label.setAttribute("text-anchor", "middle");
+        label.textContent = edge.label;
+        graph.appendChild(label);
+      }});
+      payload.nodes.forEach((node) => {{
+        const pos = positions.get(node.id);
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("class", "node");
+        circle.setAttribute("cx", pos[0]);
+        circle.setAttribute("cy", pos[1]);
+        circle.setAttribute("r", 24);
+        graph.appendChild(circle);
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", pos[0]);
+        label.setAttribute("y", pos[1] + 44);
+        label.setAttribute("text-anchor", "middle");
+        label.textContent = node.label;
+        graph.appendChild(label);
+      }});
+      statusEl.textContent =
+        `${{payload.nodes.length}} nodes, ${{payload.edges.length}} edges`;
+    }}
+
+    fetch(`/assets/${{assetId}}/graph`)
+      .then(async (response) => {{
+        const payload = await response.json();
+        if (!response.ok) throw payload;
+        return payload;
+      }})
+      .then(draw)
+      .catch((error) => {{
+        statusEl.textContent = "Graph could not be loaded.";
+        errorEl.hidden = false;
+        errorEl.textContent = JSON.stringify(error, null, 2);
+      }});
+  </script>
+</body>
+</html>"""
+
+
+@router.get(
+    "/{asset_id}/graph/view",
+    response_class=HTMLResponse,
+    summary="Render a simple endpoint-driven graph visualization",
+    responses={
+        code: response
+        for code, response in RELATIONSHIP_ERROR_RESPONSES.items()
+        if code in {401}
+    },
+)
+async def view_asset_graph(
+    asset_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> HTMLResponse:
+    """Return an authenticated HTML shell that fetches the graph endpoint."""
+    _ = current_user
+    return HTMLResponse(_graph_view_html(asset_id))
+
+
+@relationships_router.post(
+    "",
+    response_model=RelationshipRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create an organization-owned asset relationship",
+    responses=RELATIONSHIP_ERROR_RESPONSES,
+)
+async def create_relationship(
+    payload: RelationshipCreate,
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RelationshipRead:
+    """Create a typed relationship between two current-organization assets."""
+    return await tenant_assets.create_owned_relationship(session, current_user, payload)
+
+
+@relationships_router.get(
+    "",
+    response_model=RelationshipList,
+    summary="List organization-owned asset relationships",
+    responses={
+        code: response
+        for code, response in RELATIONSHIP_ERROR_RESPONSES.items()
+        if code in {401}
+    },
+)
+async def list_relationships(
+    session: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> RelationshipList:
+    """List relationships visible to the authenticated organization."""
+    return await tenant_assets.list_relationships(session, current_user)

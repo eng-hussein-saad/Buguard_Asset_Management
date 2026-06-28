@@ -189,7 +189,7 @@ As an evaluator or developer, I want a simple graph view that uses the graph end
 ## Assumptions
 
 - Phase 1 has already established the backend application foundation, database connectivity, migration workflow, tests, Docker setup, and README setup notes.
-- Phase 2 has already established organizations, users, seeded users, JWT authentication, current-user context, tenant scoping rules, relationship storage, and role-based permissions.
+- Phase 2 has already established organizations, users, seeded users, JWT authentication, current-user context, tenant scoping rules, and role-based permissions.
 - Phase 3 has already established tenant-scoped asset CRUD, asset validation, structured domain errors, and the asset-not-found response.
 - Phase 4 has already established idempotent asset observation behavior, bulk import, lifecycle handling, and organization-scoped asset ingestion.
 - Phase 5 is limited to asset relationships, relationship listing, graph retrieval, and simple graph visualization. Rate limiting, caching, CI expansion, and LangChain analysis remain outside this phase.

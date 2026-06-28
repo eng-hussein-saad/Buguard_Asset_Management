@@ -7,6 +7,7 @@ from app.schemas.assets import (
     AssetImportBatch,
     AssetListParams,
     AssetUpdate,
+    RelationshipCreate,
 )
 from app.services import tenant_assets
 
@@ -188,3 +189,45 @@ async def test_import_rejects_client_ownership_without_leaking_tenant_data(
 
     import_summary_assertion(summary.model_dump(), created=0, updated=0, failed=1)
     assert tenant_assets.import_status_code(summary) == 422
+
+
+@pytest.mark.asyncio
+async def test_cross_organization_relationship_assets_return_not_found(
+    demo_user, asset_factory, monkeypatch
+) -> None:
+    local = asset_factory(demo_user.organization_id, value="example.com")
+    foreign = asset_factory(uuid4(), value="foreign.example.com")
+
+    async def fake_get(session, organization_id, asset_id):
+        assert organization_id == demo_user.organization_id
+        return local if asset_id == local.id else None
+
+    monkeypatch.setattr(
+        tenant_assets.asset_repository, "get_for_organization", fake_get
+    )
+
+    with pytest.raises(AssetNotFoundError):
+        await tenant_assets.create_owned_relationship(
+            DummySession(),
+            demo_user,
+            RelationshipCreate(
+                source_asset_id=local.id,
+                target_asset_id=foreign.id,
+                relationship_type="resolves_to",
+            ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_cross_organization_graph_center_returns_not_found(
+    demo_user, monkeypatch
+) -> None:
+    async def fake_get(*args):
+        return None
+
+    monkeypatch.setattr(
+        tenant_assets.asset_repository, "get_for_organization", fake_get
+    )
+
+    with pytest.raises(AssetNotFoundError):
+        await tenant_assets.get_asset_graph(DummySession(), demo_user, uuid4())

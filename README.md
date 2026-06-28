@@ -1,17 +1,19 @@
 # Buguard Asset Management Backend
 
 The backend provides the FastAPI foundation for Buguard Asset Management,
-multi-tenant authentication, tenant-scoped asset CRUD, and Phase 4 bulk import
-lifecycle handling. It includes
+multi-tenant authentication, tenant-scoped asset CRUD, Phase 4 bulk import
+lifecycle handling, and Phase 5 asset relationships with one-hop graph
+retrieval. It includes
 health checks, async PostgreSQL sessions, Alembic migrations, seeded evaluation
 tenants, login, refresh, logout, current-user auth, tenant ownership helpers,
 reusable RBAC checks, asset create/list/detail/update/delete endpoints, filters,
 sorting, pagination, normalization, idempotent asset import, partial import
-summaries, stale reactivation, and structured domain errors.
+summaries, stale reactivation, relationship creation/listing, graph retrieval,
+a simple graph visualization, and structured domain errors.
 
 Public registration, public organization creation, membership management,
-organization switching, graph retrieval, caching, and AI analysis are out of
-scope for this phase.
+organization switching, multi-hop graph traversal, caching, and AI analysis are
+out of scope for this phase.
 
 ## Prerequisites
 
@@ -253,6 +255,55 @@ shallow-merge metadata with newest values winning conflicts. Stale assets become
 active when imported again; archived assets stay archived unless the import
 record explicitly sets `"status":"active"`.
 
+## Relationships and Graphs
+
+Viewers, analysts, and admins can list relationships and retrieve graph data.
+Only analysts and admins can create relationships. Relationship ownership is
+always derived from the bearer token, and payloads that include
+`organization_id` are rejected.
+
+Create a relationship between two assets in the same organization:
+
+```bash
+curl -i -X POST http://localhost:8000/relationships \
+  -H "Authorization: Bearer <analyst_access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"source_asset_id":"<source_asset_id>","target_asset_id":"<target_asset_id>","relationship_type":"resolves_to","metadata":{}}'
+```
+
+Supported relationship types are `belongs_to`, `resolves_to`, `runs_on`,
+`covers`, and `detected_on`. Repeating the same organization, source asset,
+target asset, and relationship type returns HTTP 409 with
+`DUPLICATE_RELATIONSHIP` and does not create another row.
+
+List relationships for the authenticated organization:
+
+```bash
+curl -s http://localhost:8000/relationships \
+  -H "Authorization: Bearer <viewer_access_token>"
+```
+
+Retrieve the one-hop graph around an asset:
+
+```bash
+curl -s http://localhost:8000/assets/<asset_id>/graph \
+  -H "Authorization: Bearer <viewer_access_token>"
+```
+
+The graph response contains `center`, `nodes`, and `edges`. The center asset is
+always present in `nodes`, including isolated assets with no relationships.
+Only directly connected organization-owned relationships are returned.
+
+Open the simple evaluator graph view:
+
+```text
+http://localhost:8000/assets/<asset_id>/graph/view
+```
+
+The view uses the graph endpoint as its data source, labels nodes by asset
+value, labels edges by relationship type, and displays structured errors from
+the API when graph retrieval fails.
+
 ## Tenant Isolation and Roles
 
 Tenant-owned resources derive `organization_id` only from the authenticated
@@ -272,7 +323,9 @@ Role matrix:
 
 ```bash
 uv run pytest tests/unit/test_asset_normalization.py
+uv run pytest tests/unit/test_asset_relationships.py
 uv run pytest tests/contract/test_assets_api.py
+uv run pytest tests/integration/test_asset_relationships_graph.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py
 uv run pytest tests/integration/test_asset_import_lifecycle.py tests/integration/test_asset_crud.py tests/integration/test_asset_filters.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py
 uv run pytest
 uv run ruff check .
@@ -316,4 +369,15 @@ The Phase 4 bulk import contract lives at
 ```text
 POST /assets/import
 PATCH /assets/{asset_id} with status=stale lifecycle examples
+```
+
+The Phase 5 relationships and graph contract lives at
+`specs/005-asset-relationships-graph/contracts/relationships-graph-api.yaml`
+and adds:
+
+```text
+POST /relationships
+GET /relationships
+GET /assets/{asset_id}/graph
+GET /assets/{asset_id}/graph/view
 ```

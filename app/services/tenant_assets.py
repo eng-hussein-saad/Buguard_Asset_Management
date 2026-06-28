@@ -5,20 +5,31 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AssetNotFoundError, DuplicateAssetError, NotFoundError
+from app.core.errors import (
+    AssetNotFoundError,
+    DuplicateAssetError,
+    DuplicateRelationshipError,
+    NotFoundError,
+)
 from app.models.asset import Asset, AssetRelationship, AssetStatus, AssetType
 from app.models.user import User
 from app.repositories import assets as asset_repository
 from app.repositories import relationships as relationship_repository
 from app.schemas.assets import (
     AssetCreate,
+    AssetGraph,
     AssetImportBatch,
     AssetImportError,
     AssetImportSummary,
     AssetListParams,
     AssetRead,
     AssetUpdate,
+    GraphAsset,
+    GraphEdge,
     PaginatedAssets,
+    RelationshipCreate,
+    RelationshipList,
+    RelationshipRead,
 )
 from app.services.rbac import Permission, require_permission
 
@@ -374,25 +385,102 @@ async def list_assets(
 async def create_owned_relationship(
     session: AsyncSession,
     current_user: User,
-    source_asset_id: UUID,
-    target_asset_id: UUID,
-    relationship_type: str,
-) -> AssetRelationship:
+    payload: RelationshipCreate,
+) -> RelationshipRead:
     """Create a relationship only when both assets belong to the current tenant."""
     require_permission(current_user.role, Permission.CREATE_RELATIONSHIP)
     source_asset = await asset_repository.get_for_organization(
-        session, current_user.organization_id, source_asset_id
+        session, current_user.organization_id, payload.source_asset_id
     )
     target_asset = await asset_repository.get_for_organization(
-        session, current_user.organization_id, target_asset_id
+        session, current_user.organization_id, payload.target_asset_id
     )
     if source_asset is None or target_asset is None:
-        raise NotFoundError("Asset")
+        raise AssetNotFoundError()
 
-    return await relationship_repository.create_relationship(
+    duplicate = await relationship_repository.get_duplicate_for_organization(
         session,
         current_user.organization_id,
-        source_asset_id,
-        target_asset_id,
-        relationship_type,
+        payload.source_asset_id,
+        payload.target_asset_id,
+        payload.relationship_type.value,
+    )
+    if duplicate is not None:
+        raise DuplicateRelationshipError()
+
+    try:
+        relationship = await relationship_repository.create_relationship(
+            session,
+            current_user.organization_id,
+            payload.source_asset_id,
+            payload.target_asset_id,
+            payload.relationship_type.value,
+            payload.metadata,
+        )
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise DuplicateRelationshipError() from exc
+    return RelationshipRead.from_model(relationship)
+
+
+def _relationship_read(relationship: AssetRelationship) -> RelationshipRead:
+    """Map a relationship model to an API response with no tenant id."""
+    return RelationshipRead.from_model(relationship)
+
+
+def _graph_asset(asset: Asset) -> GraphAsset:
+    """Map an asset model to the visualization-friendly graph node shape."""
+    return GraphAsset.from_model(asset)
+
+
+def _graph_edge(relationship: AssetRelationship) -> GraphEdge:
+    """Map a relationship model to the visualization-friendly graph edge shape."""
+    return GraphEdge.from_model(relationship)
+
+
+async def list_relationships(
+    session: AsyncSession, current_user: User
+) -> RelationshipList:
+    """List relationships scoped to the authenticated user's organization."""
+    require_permission(current_user.role, Permission.READ_RELATIONSHIPS)
+    relationships = await relationship_repository.list_for_organization(
+        session, current_user.organization_id
+    )
+    return RelationshipList(items=[_relationship_read(item) for item in relationships])
+
+
+async def get_asset_graph(
+    session: AsyncSession, current_user: User, asset_id: UUID
+) -> AssetGraph:
+    """Return a de-duplicated one-hop graph for an organization-owned asset."""
+    require_permission(current_user.role, Permission.READ_GRAPH)
+    center = await asset_repository.get_for_organization(
+        session, current_user.organization_id, asset_id
+    )
+    if center is None:
+        raise AssetNotFoundError()
+
+    relationships = await relationship_repository.list_one_hop_for_asset(
+        session, current_user.organization_id, asset_id
+    )
+    nodes_by_id: dict[UUID, GraphAsset] = {center.id: _graph_asset(center)}
+    edges_by_id: dict[UUID, GraphEdge] = {}
+
+    for relationship in relationships:
+        source = relationship.source_asset
+        target = relationship.target_asset
+        if (
+            source.organization_id != current_user.organization_id
+            or target.organization_id != current_user.organization_id
+        ):
+            continue
+        nodes_by_id.setdefault(source.id, _graph_asset(source))
+        nodes_by_id.setdefault(target.id, _graph_asset(target))
+        edges_by_id.setdefault(relationship.id, _graph_edge(relationship))
+
+    return AssetGraph(
+        center=_graph_asset(center),
+        nodes=list(nodes_by_id.values()),
+        edges=list(edges_by_id.values()),
     )

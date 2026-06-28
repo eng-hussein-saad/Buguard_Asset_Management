@@ -1,8 +1,9 @@
 from uuid import uuid4
 
 import pytest
-from app.core.errors import NotFoundError
+from app.core.errors import AssetNotFoundError, NotFoundError
 from app.models.user import User
+from app.schemas.assets import RelationshipCreate
 from app.services import tenant_assets
 
 
@@ -55,11 +56,13 @@ async def test_cross_organization_relationship_is_rejected(monkeypatch) -> None:
         fake_get_for_organization,
     )
 
-    with pytest.raises(NotFoundError):
+    with pytest.raises(AssetNotFoundError):
         await tenant_assets.create_owned_relationship(
             None,
             user,
-            uuid4(),
-            uuid4(),
-            "resolves_to",
+            RelationshipCreate(
+                source_asset_id=uuid4(),
+                target_asset_id=uuid4(),
+                relationship_type="resolves_to",
+            ),
         )

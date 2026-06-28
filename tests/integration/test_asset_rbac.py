@@ -2,7 +2,12 @@ from uuid import uuid4
 
 import pytest
 from app.core.errors import AuthorizationError
-from app.schemas.assets import AssetCreate, AssetImportBatch, AssetUpdate
+from app.schemas.assets import (
+    AssetCreate,
+    AssetImportBatch,
+    AssetUpdate,
+    RelationshipCreate,
+)
 from app.services import tenant_assets
 
 
@@ -30,6 +35,17 @@ async def test_viewer_mutations_are_denied(viewer_user) -> None:
             DummySession(),
             viewer_user,
             AssetImportBatch(items=[{"type": "domain", "value": "example.com"}]),
+        )
+
+    with pytest.raises(AuthorizationError):
+        await tenant_assets.create_owned_relationship(
+            DummySession(),
+            viewer_user,
+            RelationshipCreate(
+                source_asset_id=uuid4(),
+                target_asset_id=uuid4(),
+                relationship_type="resolves_to",
+            ),
         )
 
 

@@ -6,7 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
-from app.models.asset import Asset, AssetStatus, AssetType
+from app.models.asset import (
+    Asset,
+    AssetRelationship,
+    AssetStatus,
+    AssetType,
+    RelationshipType,
+)
 
 AssetSortField = Literal[
     "value", "type", "status", "first_seen", "last_seen", "created_at"
@@ -133,6 +139,95 @@ class AssetRead(BaseModel):
             created_at=asset.created_at,
             updated_at=asset.updated_at,
         )
+
+
+class RelationshipCreate(BaseModel):
+    """Validates relationship creation without accepting organization ownership."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_asset_id: UUID
+    target_asset_id: UUID
+    relationship_type: RelationshipType
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class RelationshipRead(BaseModel):
+    """Serializes an asset relationship without exposing tenant ownership."""
+
+    id: UUID
+    source_asset_id: UUID
+    target_asset_id: UUID
+    relationship_type: RelationshipType
+    metadata: dict[str, Any]
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, relationship: AssetRelationship) -> RelationshipRead:
+        """Build an API response from a relationship model."""
+        return cls(
+            id=relationship.id,
+            source_asset_id=relationship.source_asset_id,
+            target_asset_id=relationship.target_asset_id,
+            relationship_type=RelationshipType(relationship.relationship_type),
+            metadata=dict(relationship.relationship_metadata or {}),
+            created_at=relationship.created_at,
+        )
+
+
+class RelationshipList(BaseModel):
+    """Serializes all relationships visible to the current organization."""
+
+    items: list[RelationshipRead]
+
+
+class GraphAsset(BaseModel):
+    """Serializes one asset node in a graph response."""
+
+    id: UUID
+    type: AssetType
+    value: str
+    label: str
+
+    @classmethod
+    def from_model(cls, asset: Asset) -> GraphAsset:
+        """Build a graph node label from an asset model."""
+        return cls(
+            id=asset.id,
+            type=AssetType(asset.type),
+            value=asset.value,
+            label=asset.value,
+        )
+
+
+class GraphEdge(BaseModel):
+    """Serializes one relationship edge in a graph response."""
+
+    id: UUID
+    source_asset_id: UUID
+    target_asset_id: UUID
+    relationship_type: RelationshipType
+    label: str
+
+    @classmethod
+    def from_model(cls, relationship: AssetRelationship) -> GraphEdge:
+        """Build a graph edge label from a relationship model."""
+        relationship_type = RelationshipType(relationship.relationship_type)
+        return cls(
+            id=relationship.id,
+            source_asset_id=relationship.source_asset_id,
+            target_asset_id=relationship.target_asset_id,
+            relationship_type=relationship_type,
+            label=relationship_type.value,
+        )
+
+
+class AssetGraph(BaseModel):
+    """Serializes the one-hop graph centered on an organization-owned asset."""
+
+    center: GraphAsset
+    nodes: list[GraphAsset]
+    edges: list[GraphEdge]
 
 
 class AssetListParams(BaseModel):

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import app.db.base  # noqa: F401
 import pytest
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetRelationship
 from app.models.user import User
 from fastapi import FastAPI
 
@@ -128,6 +128,45 @@ def assert_import_summary(
     assert "errors" in body
 
 
+def build_relationship(
+    organization_id,
+    source_asset_id,
+    target_asset_id,
+    relationship_type: str = "resolves_to",
+    metadata: dict | None = None,
+) -> AssetRelationship:
+    """Build an AssetRelationship model for service and route tests."""
+    now = datetime(2026, 6, 28, tzinfo=UTC)
+    return AssetRelationship(
+        id=uuid4(),
+        organization_id=organization_id,
+        source_asset_id=source_asset_id,
+        target_asset_id=target_asset_id,
+        relationship_type=relationship_type,
+        relationship_metadata=metadata or {},
+        created_at=now,
+    )
+
+
+def relationship_payload(source_asset_id, target_asset_id, **overrides):
+    """Build a valid Phase 5 relationship creation payload."""
+    payload = {
+        "source_asset_id": str(source_asset_id),
+        "target_asset_id": str(target_asset_id),
+        "relationship_type": "resolves_to",
+        "metadata": {},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def assert_graph_response(body: dict, *, nodes: int, edges: int) -> None:
+    """Assert the stable top-level shape of a graph response."""
+    assert set(body) == {"center", "nodes", "edges"}
+    assert len(body["nodes"]) == nodes
+    assert len(body["edges"]) == edges
+
+
 @pytest.fixture
 def asset_factory():
     """Return a small factory for tenant-scoped asset model instances."""
@@ -144,4 +183,22 @@ def import_payload_factory():
 def import_summary_assertion():
     """Return the shared import summary assertion helper."""
     return assert_import_summary
+
+
+@pytest.fixture
+def relationship_factory():
+    """Return a factory for tenant-scoped relationship model instances."""
+    return build_relationship
+
+
+@pytest.fixture
+def relationship_payload_factory():
+    """Return a factory for relationship creation payloads."""
+    return relationship_payload
+
+
+@pytest.fixture
+def graph_response_assertion():
+    """Return the shared graph response assertion helper."""
+    return assert_graph_response
 
