@@ -20,6 +20,13 @@ Public registration, public organization creation, membership management,
 organization switching, multi-organization membership, live scanning,
 cross-organization reports, and multi-hop graph traversal are out of scope.
 
+Known tradeoffs: public registration and membership management are intentionally
+excluded so the assessment stays focused on seeded tenants, authenticated asset
+workflows, lifecycle handling, relationship graphs, and grounded analysis.
+Rate-limit configuration also reserves a dedicated budget for future AI analysis
+workflows while the current `/analysis/report` endpoint is protected by the same
+security-aware controls.
+
 ## Prerequisites
 
 - Python 3.13 and uv for host-based local development
