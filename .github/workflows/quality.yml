@@ -8,6 +8,8 @@ jobs:
   quality:
     name: Lint, test, and type-check
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/buguard_test
 
     steps:
       - name: Check out repository

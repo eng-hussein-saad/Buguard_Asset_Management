@@ -13,6 +13,7 @@ def test_quality_workflow_runs_required_checks() -> None:
     assert "push:" in workflow
     assert "pull_request:" in workflow
     assert "python-version: \"3.13\"" in workflow
+    assert "DATABASE_URL:" in workflow
     assert "uv sync --locked --all-groups" in workflow
     assert "uv run ruff check app tests" in workflow
     assert "uv run pytest" in workflow
