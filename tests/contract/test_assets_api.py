@@ -350,4 +350,7 @@ async def test_graph_routes_response_shapes(
     assert graph_response.status_code == 200
     assert graph_response.json()["center"]["id"] == str(asset.id)
     assert view_response.status_code == 200
+    assert 'id="token"' in view_response.text
+    assert "localStorage" in view_response.text
+    assert "Authorization: `Bearer ${accessToken}`" in view_response.text
     assert "/assets/${assetId}/graph" in view_response.text

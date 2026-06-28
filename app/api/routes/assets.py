@@ -118,7 +118,7 @@ async def list_assets(
 @router.post(
     "/import",
     response_model=AssetImportSummary,
-    summary="Import organization-owned asset observations",
+    summary="Bulk-import organization-owned assets idempotently",
     responses={
         **{
             code: response
@@ -232,28 +232,69 @@ def _graph_view_html(asset_id: UUID) -> str:
   <style>
     body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #111827; }}
     main {{ max-width: 960px; margin: 0 auto; }}
+    form {{
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: minmax(0, 1fr) auto;
+      margin: 1rem 0;
+    }}
+    input {{
+      border: 1px solid #cbd5e1;
+      font: inherit;
+      min-width: 0;
+      padding: 0.65rem 0.75rem;
+    }}
+    button {{
+      background: #0f766e;
+      border: 1px solid #0f766e;
+      color: white;
+      cursor: pointer;
+      font: inherit;
+      padding: 0.65rem 1rem;
+    }}
     svg {{ width: 100%; height: 520px; border: 1px solid #d1d5db; }}
     .node {{ fill: #0f766e; }}
     .edge {{ stroke: #64748b; stroke-width: 2; }}
     text {{ font-size: 13px; fill: #111827; }}
     pre {{ background: #f3f4f6; padding: 1rem; overflow: auto; }}
+    @media (max-width: 640px) {{
+      body {{ margin: 1rem; }}
+      form {{ grid-template-columns: 1fr; }}
+    }}
   </style>
 </head>
 <body>
   <main>
     <h1>Asset Graph</h1>
-    <p id="status">Loading graph for {asset_id}...</p>
+    <form id="token-form">
+      <input
+        id="token"
+        name="token"
+        type="password"
+        autocomplete="off"
+        placeholder="Bearer access token"
+        aria-label="Bearer access token"
+      >
+      <button type="submit">Load Graph</button>
+    </form>
+    <p id="status">Paste a bearer access token to load graph for {asset_id}.</p>
     <svg id="graph" role="img" aria-label="Asset relationship graph"></svg>
     <pre id="error" hidden></pre>
   </main>
   <script>
     const assetId = "{asset_id}";
+    const storageKey = "buguardGraphAccessToken";
+    const form = document.getElementById("token-form");
+    const tokenInput = document.getElementById("token");
     const graph = document.getElementById("graph");
     const statusEl = document.getElementById("status");
     const errorEl = document.getElementById("error");
+    const queryToken = new URLSearchParams(window.location.search).get("token");
+    tokenInput.value = queryToken || localStorage.getItem(storageKey) || "";
 
     function draw(payload) {{
       graph.innerHTML = "";
+      errorEl.hidden = true;
       const width = graph.clientWidth || 900;
       const height = graph.clientHeight || 520;
       const cx = width / 2;
@@ -310,18 +351,44 @@ def _graph_view_html(asset_id: UUID) -> str:
         `${{payload.nodes.length}} nodes, ${{payload.edges.length}} edges`;
     }}
 
-    fetch(`/assets/${{assetId}}/graph`)
-      .then(async (response) => {{
-        const payload = await response.json();
-        if (!response.ok) throw payload;
-        return payload;
+    function normalizeToken(value) {{
+      return value.trim().replace(/^Bearer\\s+/i, "");
+    }}
+
+    function loadGraph(token) {{
+      const accessToken = normalizeToken(token);
+      if (!accessToken) {{
+        statusEl.textContent = "Paste a bearer access token to load graph for {asset_id}.";
+        return;
+      }}
+      localStorage.setItem(storageKey, accessToken);
+      statusEl.textContent = `Loading graph for ${{assetId}}...`;
+      graph.innerHTML = "";
+      errorEl.hidden = true;
+      fetch(`/assets/${{assetId}}/graph`, {{
+        headers: {{ Authorization: `Bearer ${{accessToken}}` }},
       }})
-      .then(draw)
-      .catch((error) => {{
-        statusEl.textContent = "Graph could not be loaded.";
-        errorEl.hidden = false;
-        errorEl.textContent = JSON.stringify(error, null, 2);
-      }});
+        .then(async (response) => {{
+          const payload = await response.json();
+          if (!response.ok) throw payload;
+          return payload;
+        }})
+        .then(draw)
+        .catch((error) => {{
+          statusEl.textContent = "Graph could not be loaded.";
+          errorEl.hidden = false;
+          errorEl.textContent = JSON.stringify(error, null, 2);
+        }});
+    }}
+
+    form.addEventListener("submit", (event) => {{
+      event.preventDefault();
+      loadGraph(tokenInput.value);
+    }});
+
+    if (tokenInput.value) {{
+      loadGraph(tokenInput.value);
+    }}
   </script>
 </body>
 </html>"""
@@ -331,18 +398,9 @@ def _graph_view_html(asset_id: UUID) -> str:
     "/{asset_id}/graph/view",
     response_class=HTMLResponse,
     summary="Render a simple endpoint-driven graph visualization",
-    responses={
-        code: response
-        for code, response in RELATIONSHIP_ERROR_RESPONSES.items()
-        if code in {401}
-    },
 )
-async def view_asset_graph(
-    asset_id: UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
-) -> HTMLResponse:
-    """Return an authenticated HTML shell that fetches the graph endpoint."""
-    _ = current_user
+async def view_asset_graph(asset_id: UUID) -> HTMLResponse:
+    """Return a dev-friendly HTML shell that fetches protected graph data."""
     return HTMLResponse(_graph_view_html(asset_id))
 
 
