@@ -38,7 +38,7 @@
 - [ ] T007 [P] Add RateLimitExceededError using the established structured error envelope and 429 status in app/core/errors.py
 - [ ] T008 [P] Add a reusable rate-limit service with operation rules, effective-caller key construction, fixed-window counters, retry metadata, cache-store fallback behavior, and docstrings in app/services/rate_limits.py
 - [ ] T009 [P] Add a reusable cache service with organization-scoped key building, JSON serialization, namespace invalidation, graceful fallback, and docstrings in app/services/cache.py
-- [ ] T010 [P] Add a cache client dependency provider that can be unavailable without breaking application startup in app/api/deps.py
+- [ ] T010 [P] Add and lock the selected Redis-compatible cache client dependency in pyproject.toml and uv.lock, then add a cache client dependency provider that can be unavailable without breaking application startup in app/api/deps.py
 - [ ] T011 [P] Add reusable test fixtures for seeded user clients, second-organization data, rate-limit windows, and cache stubs in tests/conftest.py
 - [ ] T012 [P] Add contract-test helpers for structured 429 responses and cache-related response documentation in tests/contract/test_test_ci_rate_limits_api.py
 - [ ] T013 [P] Add unit test modules for rate-limit and cache helper behavior in tests/unit/test_rate_limits.py and tests/unit/test_cache.py
