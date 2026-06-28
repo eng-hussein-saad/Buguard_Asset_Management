@@ -4,9 +4,10 @@ import pytest
 from app.api.deps import get_current_user, get_db, get_rate_limiter
 from app.core.config import Settings
 from app.models.user import User
+from app.schemas.analysis import AnalysisReportResponse
 from app.schemas.assets import AssetImportSummary
+from app.services import analysis, tenant_assets
 from app.services import auth as auth_service
-from app.services import tenant_assets
 from app.services.rate_limits import RateLimitService
 from httpx import ASGITransport, AsyncClient
 
@@ -22,6 +23,7 @@ def _settings() -> Settings:
         RATE_LIMIT_LOGIN_ATTEMPTS=2,
         RATE_LIMIT_REFRESH_ATTEMPTS=2,
         RATE_LIMIT_BULK_IMPORT_ATTEMPTS=2,
+        RATE_LIMIT_AI_ANALYSIS_ATTEMPTS=2,
     )
 
 
@@ -123,3 +125,34 @@ async def test_bulk_import_rate_limit_runs_after_rbac(
         forbidden = await client.post("/assets/import", json=import_payload_factory())
 
     assert forbidden.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_analysis_report_rate_limit_returns_structured_429(
+    app_instance, demo_user, monkeypatch
+) -> None:
+    """Verify analysis reports use the documented AI analysis limit."""
+    calls = 0
+
+    async def fake_generate_report(session, current_user, payload, provider):
+        nonlocal calls
+        calls += 1
+        return AnalysisReportResponse(
+            summary="ok",
+            risks=[],
+            evidence=[],
+            status="completed",
+        )
+
+    monkeypatch.setattr(analysis, "generate_report", fake_generate_report)
+
+    async with await _client(app_instance, demo_user) as client:
+        for _ in range(2):
+            response = await client.post("/analysis/report", json={"limit": 1})
+            assert response.status_code == 200
+        limited = await client.post("/analysis/report", json={"limit": 1})
+
+    assert limited.status_code == 429
+    assert limited.json()["error"]["code"] == "rate_limited"
+    assert limited.json()["error"]["details"]["operation"] == "ai_analysis"
+    assert calls == 2
