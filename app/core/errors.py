@@ -106,3 +106,17 @@ class DuplicateRelationshipError(AppError):
             "Relationship already exists.",
         )
 
+
+class RateLimitExceededError(AppError):
+    """Raised when an operation exceeds its configured request threshold."""
+
+    def __init__(self, operation: str, retry_after_seconds: int) -> None:
+        super().__init__(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "rate_limited",
+            "Too many requests. Try again later.",
+            {
+                "operation": operation,
+                "retry_after_seconds": retry_after_seconds,
+            },
+        )

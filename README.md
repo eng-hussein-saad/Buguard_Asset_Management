@@ -3,16 +3,18 @@
 The backend provides the FastAPI foundation for Buguard Asset Management,
 multi-tenant authentication, tenant-scoped asset CRUD, Phase 4 bulk import
 lifecycle handling, and Phase 5 asset relationships with one-hop graph
-retrieval. It includes
+retrieval, Phase 6 rate limits, organization-scoped cached reads, and CI
+quality checks. It includes
 health checks, async PostgreSQL sessions, Alembic migrations, seeded evaluation
 tenants, login, refresh, logout, current-user auth, tenant ownership helpers,
 reusable RBAC checks, asset create/list/detail/update/delete endpoints, filters,
 sorting, pagination, normalization, idempotent asset import, partial import
 summaries, stale reactivation, relationship creation/listing, graph retrieval,
-a simple graph visualization, and structured domain errors.
+a simple graph visualization, structured domain errors, fixed-window rate
+limits, and graceful cache fallback.
 
 Public registration, public organization creation, membership management,
-organization switching, multi-hop graph traversal, caching, and AI analysis are
+organization switching, multi-hop graph traversal, and AI analysis are
 out of scope for this phase.
 
 ## Prerequisites
@@ -31,6 +33,13 @@ JWT_SECRET_KEY=change-me-in-local-dev
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
+CACHE_URL=redis://localhost:6379/0
+CACHE_TTL_SECONDS=300
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_LOGIN_ATTEMPTS=5
+RATE_LIMIT_REFRESH_ATTEMPTS=10
+RATE_LIMIT_BULK_IMPORT_ATTEMPTS=10
+RATE_LIMIT_AI_ANALYSIS_ATTEMPTS=5
 ```
 
 `DATABASE_URL` is required. If it is missing or malformed, the application fails
@@ -41,10 +50,20 @@ secret value.
 default access-token lifetime is 15 minutes and the default refresh-token
 lifetime is 7 days.
 
+`CACHE_URL` points to the optional Redis-compatible cache. If it is absent or
+unreachable, asset list and graph reads use graceful fallback and return correct
+database-backed results. `CACHE_TTL_SECONDS` controls cached read lifetime.
+
+`RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_LOGIN_ATTEMPTS`,
+`RATE_LIMIT_REFRESH_ATTEMPTS`, `RATE_LIMIT_BULK_IMPORT_ATTEMPTS`, and
+`RATE_LIMIT_AI_ANALYSIS_ATTEMPTS` define the fixed-window policy. The future AI
+analysis setting documents the future AI analysis policy for the later endpoint;
+Phase 6 does not add AI analysis behavior.
+
 ## Install
 
 ```bash
-uv sync
+uv sync --all-groups
 ```
 
 ## Run Locally
@@ -78,11 +97,13 @@ Default ports:
 
 - API: `localhost:8000`
 - PostgreSQL: `localhost:5432`
+- Redis-compatible cache: `localhost:6379`
 
 The `api` service receives:
 
 ```bash
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/buguard
+CACHE_URL=redis://redis:6379/0
 ```
 
 Verify the API:
@@ -162,6 +183,12 @@ curl -s -X POST http://localhost:8000/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refresh_token":"<refresh_token>"}'
 ```
+
+Login is limited to 5 login attempts per 60 seconds for the same attempted
+email and client network identity. Refresh is limited to 10 refresh attempts
+per 60 seconds for the authenticated refresh-token user and organization.
+Requests over the threshold return HTTP 429 with the structured
+`rate_limited` error code and `retry_after_seconds` metadata.
 
 Logout:
 
@@ -255,6 +282,10 @@ shallow-merge metadata with newest values winning conflicts. Stale assets become
 active when imported again; archived assets stay archived unless the import
 record explicitly sets `"status":"active"`.
 
+Bulk import is limited to 10 bulk import attempts per 60 seconds for the
+authenticated user and organization. Viewer users remain forbidden by RBAC
+instead of consuming import rate-limit allowance.
+
 ## Relationships and Graphs
 
 Viewers, analysts, and admins can list relationships and retrieve graph data.
@@ -304,6 +335,20 @@ The view uses the graph endpoint as its data source, labels nodes by asset
 value, labels edges by relationship type, and displays structured errors from
 the API when graph retrieval fails.
 
+## Organization-Scoped Cache
+
+`GET /assets` and `GET /assets/{asset_id}/graph` use an organization-scoped
+cache when `CACHE_URL` is configured. Asset-list cache keys include the
+authenticated organization plus type, status, tag, source, value filter, sort
+field, sort order, page, and page size. Graph cache keys include the
+authenticated organization and center asset id.
+
+The cache is invalidated after asset create or refresh, asset update, asset
+delete or archive, bulk import, relationship creation, and stale marking.
+Cached payloads are never shared across organizations. If the cache service is
+unavailable or returns invalid data, the API falls back to database reads and
+continues returning tenant-scoped results.
+
 ## Tenant Isolation and Roles
 
 Tenant-owned resources derive `organization_id` only from the authenticated
@@ -322,18 +367,20 @@ Role matrix:
 ## Quality Checks
 
 ```bash
-uv run pytest tests/unit/test_asset_normalization.py
-uv run pytest tests/unit/test_asset_relationships.py
-uv run pytest tests/contract/test_assets_api.py
-uv run pytest tests/integration/test_asset_relationships_graph.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py
-uv run pytest tests/integration/test_asset_import_lifecycle.py tests/integration/test_asset_crud.py tests/integration/test_asset_filters.py tests/integration/test_asset_rbac.py tests/integration/test_asset_tenant_isolation.py
+uv sync --all-groups
+docker compose up -d db redis
+uv run alembic upgrade head
+uv run python scripts/seed.py
+uv run ruff check app tests
 uv run pytest
-uv run ruff check .
 uv run mypy app
 ```
 
-The focused asset commands cover asset lifecycle behavior; the full pytest, Ruff, and
-mypy commands remain the repository-wide quality gate.
+These commands are the local quality gate for Phase 6. GitHub Actions runs the
+same locked dependency sync, Ruff lint, pytest suite, and mypy check on `push`
+and `pull_request`. To validate failure visibility, open a temporary change
+that breaks linting or a test, confirm the named workflow step fails, then
+revert the intentional failure and confirm the workflow passes.
 
 ## Contract
 
@@ -381,3 +428,8 @@ GET /relationships
 GET /assets/{asset_id}/graph
 GET /assets/{asset_id}/graph/view
 ```
+
+The Phase 6 rate-limit and cache contract lives at
+`specs/006-test-ci-rate-limits/contracts/test-ci-rate-limits-api.yaml` and adds
+structured HTTP 429 responses for login, refresh, and bulk import, plus
+cache-behavior documentation for asset list and graph reads.

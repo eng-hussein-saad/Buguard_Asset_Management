@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_cache_service, get_current_user, get_db, get_rate_limiter
 from app.models.asset import AssetStatus, AssetType
 from app.models.user import User
 from app.schemas.assets import (
@@ -25,6 +25,13 @@ from app.schemas.assets import (
     SortOrder,
 )
 from app.services import tenant_assets
+from app.services.cache import CacheService
+from app.services.rate_limits import (
+    BULK_IMPORT,
+    RateLimitService,
+    authenticated_effective_caller,
+)
+from app.services.rbac import Permission, require_permission
 
 router = APIRouter(prefix="/assets", tags=["Assets"])
 relationships_router = APIRouter(prefix="/relationships", tags=["Relationships"])
@@ -35,6 +42,7 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     403: {"model": ErrorResponse, "description": "User role cannot perform action."},
     404: {"model": ErrorResponse, "description": "Asset was not found."},
     409: {"model": ErrorResponse, "description": "Asset already exists."},
+    429: {"model": ErrorResponse, "description": "Request rate limit exceeded."},
 }
 
 RELATIONSHIP_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -88,9 +96,12 @@ async def create_asset(
     response: Response,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> AssetRead:
     """Create a new asset or refresh an existing observation lifecycle."""
-    asset, created = await tenant_assets.create_asset(session, current_user, payload)
+    asset, created = await tenant_assets.create_asset(
+        session, current_user, payload, cache_service
+    )
     if not created:
         response.status_code = status.HTTP_200_OK
     return asset
@@ -110,20 +121,21 @@ async def list_assets(
     params: Annotated[AssetListParams, Depends(list_params)],
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> PaginatedAssets:
     """List filtered and paginated assets for the current organization."""
-    return await tenant_assets.list_assets(session, current_user, params)
+    return await tenant_assets.list_assets(session, current_user, params, cache_service)
 
 
 @router.post(
     "/import",
     response_model=AssetImportSummary,
-    summary="Bulk-import organization-owned assets idempotently",
+    summary="Import organization-owned asset observations",
     responses={
         **{
             code: response
             for code, response in ERROR_RESPONSES.items()
-            if code in {400, 401, 403}
+            if code in {400, 401, 403, 429}
         },
         207: {
             "model": AssetImportSummary,
@@ -140,9 +152,18 @@ async def import_assets(
     response: Response,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    rate_limiter: Annotated[RateLimitService, Depends(get_rate_limiter)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> AssetImportSummary:
     """Import assets idempotently and return a stable lifecycle summary."""
-    summary = await tenant_assets.import_assets(session, current_user, payload)
+    require_permission(current_user.role, Permission.BULK_IMPORT)
+    await rate_limiter.check(
+        BULK_IMPORT,
+        authenticated_effective_caller(current_user.id, current_user.organization_id),
+    )
+    summary = await tenant_assets.import_assets(
+        session, current_user, payload, cache_service
+    )
     response.status_code = tenant_assets.import_status_code(summary)
     return summary
 
@@ -177,9 +198,12 @@ async def update_asset(
     payload: AssetUpdate,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> AssetRead:
     """Update an asset while preserving authenticated organization ownership."""
-    return await tenant_assets.update_asset(session, current_user, asset_id, payload)
+    return await tenant_assets.update_asset(
+        session, current_user, asset_id, payload, cache_service
+    )
 
 
 @router.delete(
@@ -196,9 +220,10 @@ async def delete_asset(
     asset_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> Response:
     """Permanently delete an asset from the authenticated organization."""
-    await tenant_assets.delete_asset(session, current_user, asset_id)
+    await tenant_assets.delete_asset(session, current_user, asset_id, cache_service)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -216,9 +241,12 @@ async def get_asset_graph(
     asset_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> AssetGraph:
     """Return center, directly connected nodes, and directly connected edges."""
-    return await tenant_assets.get_asset_graph(session, current_user, asset_id)
+    return await tenant_assets.get_asset_graph(
+        session, current_user, asset_id, cache_service
+    )
 
 
 def _graph_view_html(asset_id: UUID) -> str:
@@ -358,7 +386,8 @@ def _graph_view_html(asset_id: UUID) -> str:
     function loadGraph(token) {{
       const accessToken = normalizeToken(token);
       if (!accessToken) {{
-        statusEl.textContent = "Paste a bearer access token to load graph for {asset_id}.";
+        statusEl.textContent =
+          "Paste a bearer access token to load graph for {asset_id}.";
         return;
       }}
       localStorage.setItem(storageKey, accessToken);
@@ -415,9 +444,12 @@ async def create_relationship(
     payload: RelationshipCreate,
     session: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    cache_service: Annotated[CacheService, Depends(get_cache_service)],
 ) -> RelationshipRead:
     """Create a typed relationship between two current-organization assets."""
-    return await tenant_assets.create_owned_relationship(session, current_user, payload)
+    return await tenant_assets.create_owned_relationship(
+        session, current_user, payload, cache_service
+    )
 
 
 @relationships_router.get(

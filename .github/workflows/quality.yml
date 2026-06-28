@@ -1,0 +1,34 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint, test, and type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Run ruff lint
+        run: uv run ruff check app tests
+
+      - name: Run pytest
+        run: uv run pytest
+
+      - name: Run mypy
+        run: uv run mypy app

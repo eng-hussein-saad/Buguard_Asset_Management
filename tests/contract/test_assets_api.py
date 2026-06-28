@@ -93,7 +93,7 @@ async def test_asset_crud_route_response_shapes(
     asset = asset_factory(demo_user.organization_id)
     response_body = AssetRead.from_model(asset)
 
-    async def fake_create(session, current_user, payload):
+    async def fake_create(session, current_user, payload, cache_service=None):
         assert payload.value == " Example.COM "
         return response_body, True
 
@@ -101,11 +101,11 @@ async def test_asset_crud_route_response_shapes(
         assert asset_id == asset.id
         return response_body
 
-    async def fake_update(session, current_user, asset_id, payload):
+    async def fake_update(session, current_user, asset_id, payload, cache_service=None):
         assert payload.status == AssetStatus.STALE
         return response_body.model_copy(update={"status": AssetStatus.STALE})
 
-    async def fake_delete(session, current_user, asset_id):
+    async def fake_delete(session, current_user, asset_id, cache_service=None):
         assert asset_id == asset.id
 
     monkeypatch.setattr(tenant_assets, "create_asset", fake_create)
@@ -135,7 +135,7 @@ async def test_asset_create_route_returns_ok_when_observation_is_refreshed(
 ) -> None:
     asset = asset_factory(demo_user.organization_id)
 
-    async def fake_create(session, current_user, payload):
+    async def fake_create(session, current_user, payload, cache_service=None):
         return AssetRead.from_model(asset), False
 
     monkeypatch.setattr(tenant_assets, "create_asset", fake_create)
@@ -155,7 +155,7 @@ async def test_asset_list_query_parameters_and_pagination_metadata(
 ) -> None:
     asset = asset_factory(demo_user.organization_id, tags=["external"])
 
-    async def fake_list(session, current_user, params):
+    async def fake_list(session, current_user, params, cache_service=None):
         assert params.type == AssetType.DOMAIN
         assert params.status == AssetStatus.ACTIVE
         assert params.tag == "external"
@@ -216,7 +216,7 @@ async def test_asset_import_route_success_and_multistatus_shapes(
     import_summary_assertion,
     monkeypatch,
 ) -> None:
-    async def fake_import(session, current_user, payload):
+    async def fake_import(session, current_user, payload, cache_service=None):
         assert payload.items[0]["value"] == "Example.COM"
         return AssetImportSummary(created=1, updated=0, failed=0, errors=[])
 
@@ -228,7 +228,7 @@ async def test_asset_import_route_success_and_multistatus_shapes(
     assert response.status_code == 200
     import_summary_assertion(response.json(), created=1, updated=0, failed=0)
 
-    async def fake_partial(session, current_user, payload):
+    async def fake_partial(session, current_user, payload, cache_service=None):
         return AssetImportSummary(
             created=1,
             updated=0,
@@ -253,7 +253,7 @@ async def test_asset_import_route_all_record_failure_shape(
     import_summary_assertion,
     monkeypatch,
 ) -> None:
-    async def fake_failure(session, current_user, payload):
+    async def fake_failure(session, current_user, payload, cache_service=None):
         return AssetImportSummary(
             created=0,
             updated=0,
@@ -299,7 +299,7 @@ async def test_relationship_routes_response_shapes(
     relationship = relationship_factory(demo_user.organization_id, source.id, target.id)
     relationship_response = RelationshipRead.from_model(relationship)
 
-    async def fake_create(session, current_user, payload):
+    async def fake_create(session, current_user, payload, cache_service=None):
         assert payload.source_asset_id == source.id
         return relationship_response
 
@@ -337,7 +337,7 @@ async def test_graph_routes_response_shapes(
         edges=[],
     )
 
-    async def fake_graph(session, current_user, asset_id):
+    async def fake_graph(session, current_user, asset_id, cache_service=None):
         assert asset_id == asset.id
         return graph
 

@@ -31,6 +31,7 @@ from app.schemas.assets import (
     RelationshipList,
     RelationshipRead,
 )
+from app.services.cache import CacheService
 from app.services.rbac import Permission, require_permission
 
 
@@ -240,7 +241,10 @@ async def observe_asset(
 
 
 async def create_asset(
-    session: AsyncSession, current_user: User, payload: AssetCreate
+    session: AsyncSession,
+    current_user: User,
+    payload: AssetCreate,
+    cache_service: CacheService | None = None,
 ) -> tuple[AssetRead, bool]:
     """Create or refresh one asset observation for the current organization."""
     require_permission(current_user.role, Permission.CREATE_ASSET)
@@ -261,6 +265,9 @@ async def create_asset(
     except IntegrityError as exc:
         await session.rollback()
         raise DuplicateAssetError() from exc
+    await _invalidate_asset_cache(
+        cache_service, current_user.organization_id, "asset_create_refresh"
+    )
     return AssetRead.from_model(asset), created
 
 
@@ -278,7 +285,11 @@ async def read_asset(
 
 
 async def update_asset(
-    session: AsyncSession, current_user: User, asset_id: UUID, payload: AssetUpdate
+    session: AsyncSession,
+    current_user: User,
+    asset_id: UUID,
+    payload: AssetUpdate,
+    cache_service: CacheService | None = None,
 ) -> AssetRead:
     """Update an organization-scoped asset with duplicate protection."""
     require_permission(current_user.role, Permission.UPDATE_ASSET)
@@ -301,11 +312,19 @@ async def update_asset(
     except IntegrityError as exc:
         await session.rollback()
         raise DuplicateAssetError() from exc
+    await _invalidate_asset_cache(
+        cache_service,
+        current_user.organization_id,
+        "mark_stale" if updated.status == AssetStatus.STALE.value else "asset_update",
+    )
     return AssetRead.from_model(updated)
 
 
 async def import_assets(
-    session: AsyncSession, current_user: User, payload: AssetImportBatch
+    session: AsyncSession,
+    current_user: User,
+    payload: AssetImportBatch,
+    cache_service: CacheService | None = None,
 ) -> AssetImportSummary:
     """Import observations idempotently under the authenticated organization."""
     require_permission(current_user.role, Permission.BULK_IMPORT)
@@ -339,11 +358,18 @@ async def import_assets(
         await session.rollback()
         raise DuplicateAssetError() from exc
 
+    if summary.created or summary.updated:
+        await _invalidate_asset_cache(
+            cache_service, current_user.organization_id, "bulk_import"
+        )
     return summary
 
 
 async def delete_asset(
-    session: AsyncSession, current_user: User, asset_id: UUID
+    session: AsyncSession,
+    current_user: User,
+    asset_id: UUID,
+    cache_service: CacheService | None = None,
 ) -> None:
     """Hard delete an organization-scoped asset when the user is an admin."""
     require_permission(current_user.role, Permission.DELETE_OR_ARCHIVE)
@@ -353,10 +379,16 @@ async def delete_asset(
     if not deleted:
         raise AssetNotFoundError()
     await session.commit()
+    await _invalidate_asset_cache(
+        cache_service, current_user.organization_id, "asset_delete_archive"
+    )
 
 
 async def list_assets(
-    session: AsyncSession, current_user: User, params: AssetListParams
+    session: AsyncSession,
+    current_user: User,
+    params: AssetListParams,
+    cache_service: CacheService | None = None,
 ) -> PaginatedAssets:
     """List filtered assets for the current user's organization with pagination."""
     require_permission(current_user.role, Permission.READ_ASSETS)
@@ -364,6 +396,12 @@ async def list_assets(
         params.value_contains = normalize_asset_value(
             params.type.value, params.value_contains
         )
+    if cache_service is not None:
+        cached = await cache_service.get_asset_list(
+            current_user.organization_id, params
+        )
+        if cached is not None:
+            return cached
     total = await asset_repository.count_for_organization(
         session, current_user.organization_id, params
     )
@@ -371,7 +409,7 @@ async def list_assets(
         session, current_user.organization_id, params
     )
     total_pages, has_next, has_previous = _page(total, params)
-    return PaginatedAssets(
+    payload = PaginatedAssets(
         items=[AssetRead.from_model(asset) for asset in assets],
         page=params.page,
         page_size=params.page_size,
@@ -380,12 +418,18 @@ async def list_assets(
         has_next=has_next,
         has_previous=has_previous,
     )
+    if cache_service is not None:
+        await cache_service.set_asset_list(
+            current_user.organization_id, params, payload
+        )
+    return payload
 
 
 async def create_owned_relationship(
     session: AsyncSession,
     current_user: User,
     payload: RelationshipCreate,
+    cache_service: CacheService | None = None,
 ) -> RelationshipRead:
     """Create a relationship only when both assets belong to the current tenant."""
     require_permission(current_user.role, Permission.CREATE_RELATIONSHIP)
@@ -421,6 +465,9 @@ async def create_owned_relationship(
     except IntegrityError as exc:
         await session.rollback()
         raise DuplicateRelationshipError() from exc
+    await _invalidate_asset_cache(
+        cache_service, current_user.organization_id, "relationship_create"
+    )
     return RelationshipRead.from_model(relationship)
 
 
@@ -451,10 +498,19 @@ async def list_relationships(
 
 
 async def get_asset_graph(
-    session: AsyncSession, current_user: User, asset_id: UUID
+    session: AsyncSession,
+    current_user: User,
+    asset_id: UUID,
+    cache_service: CacheService | None = None,
 ) -> AssetGraph:
     """Return a de-duplicated one-hop graph for an organization-owned asset."""
     require_permission(current_user.role, Permission.READ_GRAPH)
+    if cache_service is not None:
+        cached = await cache_service.get_asset_graph(
+            current_user.organization_id, asset_id
+        )
+        if cached is not None:
+            return cached
     center = await asset_repository.get_for_organization(
         session, current_user.organization_id, asset_id
     )
@@ -479,8 +535,22 @@ async def get_asset_graph(
         nodes_by_id.setdefault(target.id, _graph_asset(target))
         edges_by_id.setdefault(relationship.id, _graph_edge(relationship))
 
-    return AssetGraph(
+    graph = AssetGraph(
         center=_graph_asset(center),
         nodes=list(nodes_by_id.values()),
         edges=list(edges_by_id.values()),
     )
+    if cache_service is not None:
+        await cache_service.set_asset_graph(
+            current_user.organization_id, asset_id, graph
+        )
+    return graph
+
+
+async def _invalidate_asset_cache(
+    cache_service: CacheService | None, organization_id: UUID, reason: str
+) -> None:
+    """Invalidate organization-scoped asset caches without failing writes."""
+    if cache_service is None:
+        return
+    await cache_service.invalidate_assets(organization_id, reason)
